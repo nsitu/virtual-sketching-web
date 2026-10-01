@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, removeRedundantSegments, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, removeRedundantSegments, splitIntersectingPaths, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -29,6 +29,7 @@ const midpointJoining = element('midpoint-joining');
 const removeRedundant = element('remove-redundant');
 const redundancyTolerance = element('redundancy-tolerance');
 const redundancyToleranceValue = element('redundancy-tolerance-value');
+const splitIntersections = element('split-intersections');
 const redrawCurves = element('redraw-curves');
 const fitTolerance = element('fit-tolerance');
 const fitToleranceValue = element('fit-tolerance-value');
@@ -54,7 +55,7 @@ function updateControls() {
   runButton.disabled = busy || !loadedImage || !vectorizer?.session;
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
-  joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = removeRedundant.disabled = downloadSvgButton.disabled;
+  joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = removeRedundant.disabled = splitIntersections.disabled = downloadSvgButton.disabled;
   redundancyTolerance.disabled = downloadSvgButton.disabled || !removeRedundant.checked;
   redrawCurves.disabled = downloadSvgButton.disabled;
   fitTolerance.disabled = downloadSvgButton.disabled || !redrawCurves.checked;
@@ -77,7 +78,8 @@ function previewJoining() {
     ? removeRedundantSegments(segments, Number(redundancyTolerance.value)) : segments;
   const exactReducedPaths = joinQuadraticSegments(reducedSegments);
   const joinedPaths = joinQuadraticSegments(reducedSegments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
-  const paths = redrawCurves.checked ? redrawQuadraticPaths(joinedPaths, Number(fitTolerance.value)) : joinedPaths;
+  const split = splitIntersections.checked ? splitIntersectingPaths(joinedPaths) : { paths: joinedPaths, intersections: 0 };
+  const paths = redrawCurves.checked ? redrawQuadraticPaths(split.paths, Number(fitTolerance.value)) : split.paths;
   strokeLayer.replaceChildren(...paths.map((path, index) => createPathElement(path, { stroke: previewPathColor(index) })));
   originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
   const removed = segments.length - reducedSegments.length;
@@ -86,7 +88,7 @@ function previewJoining() {
   const redrawSummary = redrawCurves.checked
     ? ` · ${segmentCount(joinedPaths)} → ${segmentCount(paths)} cubic segments`
     : ` · ${segmentCount(paths)} segments`;
-  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${removed} redundant strokes removed · ${joins} nearby joins${redrawSummary}`;
+  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${removed} redundant strokes removed · ${joins} nearby joins · ${split.intersections} intersections split${redrawSummary}`;
 }
 
 joinDistance.addEventListener('input', previewJoining);
@@ -94,6 +96,7 @@ showOriginal.addEventListener('change', previewJoining);
 midpointJoining.addEventListener('change', previewJoining);
 removeRedundant.addEventListener('change', () => { updateControls(); previewJoining(); });
 redundancyTolerance.addEventListener('input', previewJoining);
+splitIntersections.addEventListener('change', previewJoining);
 redrawCurves.addEventListener('change', () => { updateControls(); previewJoining(); });
 fitTolerance.addEventListener('input', previewJoining);
 resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
@@ -260,6 +263,7 @@ downloadSvgButton.addEventListener('click', () => {
   downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', {
     joinDistance: Number(joinDistance.value), midpoint: midpointJoining.checked,
     removeRedundant: removeRedundant.checked, redundancyTolerance: Number(redundancyTolerance.value),
+    splitIntersections: splitIntersections.checked,
     redraw: redrawCurves.checked, fitTolerance: Number(fitTolerance.value),
   });
 });

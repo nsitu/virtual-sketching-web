@@ -65,6 +65,7 @@
           <label><input id="remove-redundant" type="checkbox" checked disabled /> Remove redundant strokes</label>
           <label for="redundancy-tolerance">Redundancy tolerance <output id="redundancy-tolerance-value" for="redundancy-tolerance">3 px</output></label>
           <input id="redundancy-tolerance" type="range" min="1" max="12" step="0.5" value="3" disabled aria-describedby="redundancy-help" />
+          <label><input id="split-intersections" type="checkbox" checked disabled /> Split intersecting paths</label>
           <label><input id="redraw-curves" type="checkbox" disabled /> Redraw with fitted curves</label>
           <label for="fit-tolerance">Fidelity <output id="fit-tolerance-value" for="fit-tolerance">1 px²</output> Smoothness</label>
           <input id="fit-tolerance" type="range" min="0.25" max="32" step="0.25" value="1" disabled aria-describedby="fit-help" />
@@ -74,6 +75,7 @@
         </div>
         <p id="fit-help">Redraw samples each joined path and fits cubic Bézier curves. Lower tolerance preserves more detail; higher tolerance smooths more aggressively.</p>
         <p id="redundancy-help">Higher tolerance removes more short paths whose sampled centerlines are already covered by aligned strokes from another contour. The original records are preserved while the preview is recomputed.</p>
+        <p id="intersection-help">Splitting makes interior crossings explicit as path endpoints. Endpoint contacts and collinear overlaps are left unchanged.</p>
         <p id="color-help">Preview paths use distinct colors to make joined geometry easier to follow; downloaded SVG paths remain black.</p>
       </section>
 

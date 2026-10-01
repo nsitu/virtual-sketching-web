@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, removeRedundantSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath, createPathElement, previewPathColor } from '../src/svg.js';
+import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, removeRedundantSegments, splitIntersectingPaths, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath, createPathElement, previewPathColor } from '../src/svg.js';
 import { BrowserVectorizer } from '../src/model.js';
 
 const stroke = {
@@ -204,6 +204,37 @@ test('redundancy pruning does not compare segments within one continuous path', 
   const first = line([0, 0], [10, 0]);
   const returning = { ...line([10, 0], [0, 0]), startsNewPath: false };
   assert.equal(removeRedundantSegments([first, returning], 12).length, 2);
+});
+
+test('intersection splitting creates an endpoint on one crossing path', () => {
+  const horizontal = { start: [-10, 0], control: [0, 0], end: [10, 0] };
+  const vertical = { start: [0, -10], control: [0, 0], end: [0, 10] };
+  const result = splitIntersectingPaths([[horizontal], [vertical]]);
+  assert.equal(result.intersections, 1);
+  assert.equal(result.paths.length, 3);
+  assert.deepEqual(result.paths.slice(1).map(path => [path[0].start, path[0].end]), [
+    [[0, -10], [0, 0]], [[0, 0], [0, 10]],
+  ]);
+  assert.equal((buildQuadraticSvg([[horizontal], [vertical]].flat(), 40, 40, { splitIntersections: true }).match(/<path\b/g) || []).length, 3);
+});
+
+test('intersection splitting handles a self-crossing path without splitting adjacent segments', () => {
+  const first = { start: [-10, 0], control: [-5, 5], end: [0, 10] };
+  const second = { start: [0, 10], control: [5, 5], end: [10, 0] };
+  const crossing = { start: [10, 0], control: [0, 10], end: [-10, 10] };
+  const result = splitIntersectingPaths([[first, second, crossing]]);
+  assert.equal(result.intersections, 1);
+  assert.equal(result.paths.length, 2);
+  assert.equal(result.paths[0].at(-1).end[0], result.paths[1][0].start[0]);
+  assert.equal(result.paths[0].at(-1).end[1], result.paths[1][0].start[1]);
+});
+
+test('intersection splitting ignores endpoint contacts, collinear overlaps and adjacent path segments', () => {
+  const horizontal = { start: [-10, 0], control: [0, 0], end: [0, 0] };
+  const vertical = { start: [0, 0], control: [0, 5], end: [0, 10] };
+  assert.equal(splitIntersectingPaths([[horizontal], [vertical]]).intersections, 0);
+  const overlap = { start: [-5, 0], control: [0, 0], end: [5, 0] };
+  assert.equal(splitIntersectingPaths([[horizontal, overlap]]).intersections, 0);
 });
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {

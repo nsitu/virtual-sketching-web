@@ -147,6 +147,103 @@ function sampleQuadratic(segment, sampleCount = 16) {
   return points;
 }
 
+function cross(a, b) {
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+function lineIntersection(a, b, c, d) {
+  const directionA = [b[0] - a[0], b[1] - a[1]];
+  const directionB = [d[0] - c[0], d[1] - c[1]];
+  const denominator = cross(directionA, directionB);
+  if (Math.abs(denominator) < 1e-9) return null;
+  const offset = [c[0] - a[0], c[1] - a[1]];
+  const t = cross(offset, directionB) / denominator;
+  const u = cross(offset, directionA) / denominator;
+  if (t < -1e-8 || t > 1 + 1e-8 || u < -1e-8 || u > 1 + 1e-8) return null;
+  return {
+    t: Math.max(0, Math.min(1, t)),
+    u: Math.max(0, Math.min(1, u)),
+    point: [a[0] + t * directionA[0], a[1] + t * directionA[1]],
+  };
+}
+
+function splitQuadraticSegment(segment, t) {
+  const lerp = (a, b, amount) => [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount];
+  const first = lerp(segment.start, segment.control, t);
+  const second = lerp(segment.control, segment.end, t);
+  const shared = lerp(first, second, t);
+  return [
+    { ...segment, start: segment.start, control: first, end: shared },
+    { ...segment, start: shared, control: second, end: segment.end, startsNewPath: false },
+  ];
+}
+
+function splitPathAtIntersections(path, cuts) {
+  const result = [], current = [];
+  for (let index = 0; index < path.length; index++) {
+    const segment = path[index];
+    const parameters = [...new Set((cuts.get(index) || []).sort((a, b) => a - b))];
+    let pieces = [segment], previous = 0;
+    for (const parameter of parameters) {
+      const local = (parameter - previous) / (1 - previous);
+      const [left, right] = splitQuadraticSegment(pieces.at(-1), local);
+      pieces[pieces.length - 1] = left;
+      pieces.push(right);
+      previous = parameter;
+    }
+    for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex++) {
+      current.push({ ...pieces[pieceIndex], startsNewPath: current.length ? pieces[pieceIndex].startsNewPath : true });
+      if (pieceIndex < pieces.length - 1) {
+        result.push(current.splice(0));
+      }
+    }
+  }
+  if (current.length) result.push(current.splice(0));
+  return result;
+}
+
+// Detect interior crossings using a finely sampled polyline approximation,
+// then split the second participating path at each crossing. Endpoint
+// contacts and collinear overlaps are left alone because they are already
+// represented by path continuity or need a separate overlap policy.
+export function splitIntersectingPaths(paths, samplesPerSegment = 24) {
+  if (!Number.isInteger(samplesPerSegment) || samplesPerSegment < 4) throw new RangeError('Intersection sampling must use at least four subdivisions.');
+  const records = paths.flatMap((path, pathIndex) => path.map((segment, segmentIndex) => ({ pathIndex, segmentIndex, segment, points: sampleQuadratic(segment, samplesPerSegment) })));
+  const cuts = new Map();
+  const intersections = [];
+  const addCut = (pathIndex, segmentIndex, parameter) => {
+    if (!cuts.has(pathIndex)) cuts.set(pathIndex, new Map());
+    const pathCuts = cuts.get(pathIndex);
+    if (!pathCuts.has(segmentIndex)) pathCuts.set(segmentIndex, []);
+    pathCuts.get(segmentIndex).push(parameter);
+  };
+  for (let a = 0; a < records.length; a++) {
+    const first = records[a];
+    for (let b = a + 1; b < records.length; b++) {
+      const second = records[b];
+      if (first.pathIndex === second.pathIndex && Math.abs(first.segmentIndex - second.segmentIndex) <= 1) continue;
+      const pairIntersections = [];
+      for (let i = 0; i < samplesPerSegment; i++) for (let j = 0; j < samplesPerSegment; j++) {
+        const hit = lineIntersection(first.points[i], first.points[i + 1], second.points[j], second.points[j + 1]);
+        if (!hit) continue;
+        const t = (i + hit.t) / samplesPerSegment, u = (j + hit.u) / samplesPerSegment;
+        if (t <= 1e-3 || t >= 1 - 1e-3 || u <= 1e-3 || u >= 1 - 1e-3) continue;
+        if (pairIntersections.some(previous => Math.abs(previous.t - t) < 2 / samplesPerSegment && Math.abs(previous.u - u) < 2 / samplesPerSegment)) continue;
+        pairIntersections.push({ t, u, point: hit.point });
+      }
+      for (const intersection of pairIntersections) {
+        // Splitting the second path keeps the operation deterministic and
+        // avoids doubling the number of new endpoints at a crossing.
+        addCut(second.pathIndex, second.segmentIndex, intersection.u);
+        intersections.push({ ...intersection, first, second });
+      }
+    }
+  }
+  if (!intersections.length) return { paths: paths.map(path => path.slice()), intersections: 0 };
+  const splitPaths = paths.flatMap((path, pathIndex) => splitPathAtIntersections(path, cuts.get(pathIndex) || new Map()));
+  return { paths: splitPaths, intersections: intersections.length };
+}
+
 function segmentLength(segment, sampleCount = 16) {
   const points = sampleQuadratic(segment, sampleCount);
   let length = 0;
@@ -288,11 +385,12 @@ export function appendStrokePathElement(layer, stroke, previousStroke) {
   }
 }
 
-export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true, redraw = false, fitTolerance = 1, removeRedundant = false, redundancyTolerance = 3 } = {}) {
+export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true, redraw = false, fitTolerance = 1, removeRedundant = false, redundancyTolerance = 3, splitIntersections = false } = {}) {
   const style = Object.entries(PATH_STYLE).map(([name, value]) => `${name}="${value}"`).join(' ');
   const source = removeRedundant ? removeRedundantSegments(segments, redundancyTolerance) : segments;
   const joined = joinQuadraticSegments(source, joinDistance, { midpoint });
-  const paths = redraw ? redrawQuadraticPaths(joined, fitTolerance) : joined;
+  const split = splitIntersections ? splitIntersectingPaths(joined) : { paths: joined, intersections: 0 };
+  const paths = redraw ? redrawQuadraticPaths(split.paths, fitTolerance) : split.paths;
   const body = paths.map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }

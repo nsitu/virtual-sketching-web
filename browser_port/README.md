@@ -171,8 +171,17 @@ recomputes from the untouched model records whenever the checkbox or slider
 changes. Larger tolerances allow more aggressive pruning and may remove small
 details. The download uses the same survivor set as the preview.
 
-**Redraw with fitted curves** is an optional second pass after joining. It
-samples each joined path and uses the MIT-licensed [`fit-curve`](https://github.com/soswow/fit-curve)
+**Split intersecting paths** is enabled by default as the final topology pass.
+After joining and pruning, it detects interior crossings between sampled
+quadratic segments, including non-adjacent segments of one path, and splits
+the second participating path at each crossing. This preserves the centerline
+while making the crossing an explicit pair of path endpoints. Endpoint
+contacts and collinear overlaps are ignored. The optional redraw then fits
+each resulting piece independently.
+
+**Redraw with fitted curves** is an optional final pass after joining and
+intersection splitting. It samples each resulting path and uses the
+MIT-licensed [`fit-curve`](https://github.com/soswow/fit-curve)
 implementation of Schneider's curve-fitting algorithm to produce cubic Bézier
 segments. The **Fidelity / Smoothness** tolerance is expressed as squared image
 pixels: lower values retain more of the input geometry and usually produce more

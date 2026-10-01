@@ -130,7 +130,8 @@ new, unintended connector. The final order should be:
 
 1. score and conservatively remove redundant source segments;
 2. join the surviving segments using the existing endpoint and midpoint rules;
-3. optionally redraw the resulting paths with the fitted-curve pass.
+3. split interior intersections so crossings become explicit endpoints;
+4. optionally redraw the resulting paths with the fitted-curve pass.
 
 A one-off geometric scan of the saved `example-result.svg` used the uniform
 3.5-pixel display width as a proximity scale. It found one convincing
@@ -158,3 +159,18 @@ orange original overlay remains available for inspection. If the example
 produces too few deletions under these safeguards, the next step should be
 curve consolidation of parallel partial overlaps rather than a more aggressive
 deletion rule.
+
+## Intersection splitting (2026-10-01)
+
+The browser now runs an enabled-by-default **Split intersecting paths** pass
+after pruning and nearby joining, before optional curve redraw. It samples each
+quadratic segment into a polyline, detects interior crossings between
+non-adjacent segments or separate paths, and splits only the second
+participating path at each crossing using the quadratic de Casteljau
+construction. The centerline is unchanged, but the crossing becomes an
+explicit endpoint and the preview reports how many intersections were split.
+Endpoint contacts and collinear overlaps are intentionally ignored. The pass
+is deterministic and can be unchecked to compare the original joined topology.
+On the saved example, the default 3-pixel pruning removes one segment before
+joining; the resulting 19 paths contain one detected interior crossing and
+produce 20 explicit path pieces after splitting.

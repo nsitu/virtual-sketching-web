@@ -152,10 +152,12 @@ endpoints move. Uncheck it to retain the original endpoints and bridge gaps with
 straight `L` segments. Neither mode refits curves or consolidates overlapping ink.
 
 The slider recomputes from the original stroke records, so lowering it or using
-**Reset joining** reverses the transformation. **Overlay original in blue**
-compares against the baseline in orange, and the preview reports baseline/result
-path counts and additional joins. The download uses the current distance and
-midpoint setting, with no overlay or background rectangle. These controls are available after
+**Reset joining** reverses the transformation. Each generated preview path gets
+a stable contrasting color so adjoining paths are easy to distinguish while
+the controls are adjusted. **Overlay original in orange** compares against the
+baseline, and the preview reports baseline/result path counts and additional
+joins. The download uses the current distance and midpoint setting, with no
+overlay or background rectangle; exported paths remain black. These controls are available after
 inference completes; changing distance does not rerun or modify model inference.
 Distance alone cannot infer intended contours; inspect larger thresholds for
 connections between distinct details, especially around junctions.

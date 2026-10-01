@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createPathElement, redrawQuadraticPaths } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -70,7 +70,7 @@ function previewJoining() {
   const baseline = joinQuadraticSegments(segments);
   const joinedPaths = joinQuadraticSegments(segments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
   const paths = redrawCurves.checked ? redrawQuadraticPaths(joinedPaths, Number(fitTolerance.value)) : joinedPaths;
-  strokeLayer.replaceChildren(...paths.map(createPathElement));
+  strokeLayer.replaceChildren(...paths.map((path, index) => createPathElement(path, { stroke: previewPathColor(index) })));
   originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
   const joins = baseline.length - paths.length;
   const segmentCount = pathSet => pathSet.reduce((count, path) => count + path.length, 0);

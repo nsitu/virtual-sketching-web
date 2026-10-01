@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath } from '../src/svg.js';
+import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath, createPathElement, previewPathColor } from '../src/svg.js';
 import { BrowserVectorizer } from '../src/model.js';
 
 const stroke = {
@@ -167,6 +167,25 @@ test('fidelity tolerance controls the number of fitted cubic segments', () => {
 test('invalid redraw tolerance is rejected', () => {
   assert.throws(() => buildQuadraticSvg([], 100, 100, { redraw: true, fitTolerance: -1 }), RangeError);
   assert.throws(() => redrawQuadraticPaths([], NaN), RangeError);
+});
+
+test('preview path colors are stable and can override the export style', () => {
+  assert.equal(previewPathColor(0), previewPathColor(0));
+  assert.notEqual(previewPathColor(0), previewPathColor(1));
+  assert.match(previewPathColor(0), /^hsl\(/);
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElementNS: () => ({
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  }) };
+  try {
+    const path = createPathElement([line([0, 0], [10, 0])], { stroke: previewPathColor(0) });
+    assert.equal(path.attributes.stroke, previewPathColor(0));
+    assert.equal(createPathElement([line([0, 0], [10, 0])]).attributes.stroke, '#000');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
 });
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {

@@ -10,6 +10,14 @@ const PATH_STYLE = {
   'stroke-linejoin': 'round',
 };
 
+// Keep preview colors stable while the joining controls are adjusted. The
+// golden-angle hue spacing gives neighboring paths visibly different colors
+// without using random values that would jump on every redraw.
+export function previewPathColor(index) {
+  const hue = (19 + Number(index) * 137.508) % 360;
+  return `hsl(${hue.toFixed(1)}, 72%, 48%)`;
+}
+
 // Match the Python SVG converter's continuous coordinates, not the quantized
 // circle stamps used by the inference rasterizer. Model parameters are in
 // (row, column) order; the saved cursor and SVG coordinates are (x, y).
@@ -168,18 +176,20 @@ export function strokeToSvgPath(stroke) {
   return quadraticPathData([strokeToQuadratic(stroke)]);
 }
 
-export function createStrokePathElement(stroke) {
-  return createQuadraticPathElement([strokeToQuadratic(stroke)]);
+export function createStrokePathElement(stroke, options = {}) {
+  return createQuadraticPathElement([strokeToQuadratic(stroke)], options);
 }
 
-export function createQuadraticPathElement(segments) {
-  return createPathElement(segments);
+export function createQuadraticPathElement(segments, options = {}) {
+  return createPathElement(segments, options);
 }
 
-export function createPathElement(segments) {
+export function createPathElement(segments, { stroke } = {}) {
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', quadraticPathData(segments));
-  for (const [name, value] of Object.entries(PATH_STYLE)) path.setAttribute(name, value);
+  for (const [name, value] of Object.entries({ ...PATH_STYLE, ...(stroke ? { stroke } : {}) })) {
+    path.setAttribute(name, value);
+  }
   return path;
 }
 

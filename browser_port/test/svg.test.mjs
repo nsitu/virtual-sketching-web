@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath } from '../src/svg.js';
+import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg } from '../src/svg.js';
 import { BrowserVectorizer } from '../src/model.js';
 
 const stroke = {
@@ -46,6 +46,62 @@ test('export keeps segments separate with open, uniformly stroked quadratic path
 });
 
 const continuation = { ...stroke, cursor: [224 / 640, 448 / 640] };
+
+const line = (start, end) => ({ start, end, control: [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2], startsNewPath: true });
+
+test('positive joining bridges an inclusive distance threshold without changing source geometry', () => {
+  const segments = [line([0, 0], [10, 0]), line([13, 0], [25, 0])];
+  const original = JSON.stringify(segments);
+  assert.equal(joinQuadraticSegments(segments, 2.99).length, 2);
+  const paths = joinQuadraticSegments(segments, 3);
+  assert.equal(paths.length, 1);
+  assert.equal(quadraticPathData(paths[0]), 'M0.000 0.000Q5.000 0.000 10.000 0.000L13.000 0.000Q19.000 0.000 25.000 0.000');
+  assert.equal(JSON.stringify(segments), original);
+  assert.equal(joinQuadraticSegments(segments, 0).length, 2);
+  assert.equal(joinQuadraticSegments(segments, 3).length, 1);
+});
+
+test('nearby joining handles all endpoint orientations and unordered paths', () => {
+  const a = line([0, 0], [10, 0]), b = line([12, 0], [25, 0]);
+  const reverse = s => ({ ...s, start: s.end, end: s.start });
+  for (const source of [[a, b], [a, reverse(b)], [reverse(a), b], [reverse(a), reverse(b)], [b, a]]) {
+    const paths = joinQuadraticSegments(source, 2);
+    assert.equal(paths.length, 1);
+    assert.equal(paths[0].length, 2);
+    assert.deepEqual(paths[0].map(s => s.control).sort((p, q) => p[0] - q[0]), [[5, 0], [18.5, 0]]);
+    const ends = [paths[0][0].start[0], paths[0].at(-1).end[0]].sort((p, q) => p - q);
+    assert.deepEqual(ends, [0, 25]);
+    assert.equal((quadraticPathData(paths[0]).match(/L/g) || []).length, 1);
+  }
+});
+
+test('nearest endpoint wins and the algorithm does not introduce branches or close cycles', () => {
+  const segments = [line([0, 0], [10, 0]), line([11, 0], [20, 0]), line([10, 2], [10, 12])];
+  const paths = joinQuadraticSegments(segments, 2);
+  assert.equal(paths.length, 2);
+  assert.deepEqual(paths[0].map(s => s.end), [[10, 0], [20, 0]]);
+  // Three edges surrounding a triangle have six free endpoints. Only two joins
+  // may be accepted, leaving an open path instead of forcing a closing edge.
+  const triangle = [line([0, 0], [10, 0]), line([11, 1], [5, 10]), line([4, 9], [0, 1])];
+  const joined = joinQuadraticSegments(triangle, 2);
+  assert.equal(joined.length, 1);
+  assert.equal(joined[0].length, 3);
+  assert.equal((quadraticPathData(joined[0]).match(/L/g) || []).length, 2);
+});
+
+test('closed contours remain closed and distance validation rejects invalid tolerances', () => {
+  const segments = [line([0, 0], [10, 0]), { ...line([10, 0], [0, 0]), startsNewPath: false }, line([1, 0], [20, 0])];
+  assert.equal(joinQuadraticSegments(segments, 5).length, 2);
+  for (const distance of [-1, NaN, Infinity]) assert.throws(() => joinQuadraticSegments(segments, distance), RangeError);
+});
+
+test('configured export serializes the same nearby paths as preview geometry with no background', () => {
+  const segments = [line([0, 0], [10, 0]), line([12, 0], [20, 0])];
+  const expected = joinQuadraticSegments(segments, 2).map(quadraticPathData);
+  const svg = buildQuadraticSvg(segments, 100, 80, { joinDistance: 2 });
+  assert.deepEqual([...svg.matchAll(/ d="([^"]+)"/g)].map(m => m[1]), expected);
+  assert.doesNotMatch(svg, /<rect\b/);
+});
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {
   const svg = buildStrokeSvg([stroke, continuation], 640);

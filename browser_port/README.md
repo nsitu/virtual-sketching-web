@@ -139,6 +139,24 @@ endpoint continuity alone. Joining preserves every quadratic segment and control
 point; it does not snap gaps, reorder strokes, refit curves, or merge overlaps.
 The UI's stroke counter still counts model segments, not joined SVG paths.
 
+After a run, **Join distance** previews more aggressive joining from 0 to 20
+image pixels in 0.5-pixel steps. Zero restores the exact-joining baseline above.
+Positive values match free endpoints across separate paths, including pen-up
+and round boundaries and paths drawn in another order or direction. The closest
+eligible pairs are joined first; each endpoint is used once, existing closed
+contours are left alone, and new cycles are not forced. Paths may be reversed.
+The existing quadratic curves retain their geometry; gaps are bridged with
+straight `L` segments. This does not refit curves or consolidate overlapping ink.
+
+The slider recomputes from the original stroke records, so lowering it or using
+**Reset joining** reverses the transformation. **Overlay original in blue**
+compares against the baseline, and the preview reports baseline/result path
+counts and additional joins. The download uses the current distance, with no
+blue overlay or background rectangle. These controls are available after
+inference completes; changing distance does not rerun or modify model inference.
+Distance alone cannot infer intended contours; inspect larger thresholds for
+connections between distinct details, especially around junctions.
+
 Predicted widths and within-segment taper are intentionally discarded for SVG
 display and export. Consequently these SVGs differ visually from the model's
 variable-width raster output and the paper's results; disclose this difference

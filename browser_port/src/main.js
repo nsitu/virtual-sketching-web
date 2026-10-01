@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { appendStrokePathElement, downloadStrokeSvg } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createQuadraticPathElement } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -22,6 +22,12 @@ const modelMetric = element('model-metric');
 const sizeMetric = element('size-metric');
 const stepsMetric = element('steps-metric');
 const strokesMetric = element('strokes-metric');
+const joinDistance = element('join-distance');
+const joinDistanceValue = element('join-distance-value');
+const showOriginal = element('show-original');
+const resetJoining = element('reset-joining');
+const joiningSummary = element('joining-summary');
+const originalLayer = element('original-layer');
 
 let vectorizer = null;
 let loadedImage = null;
@@ -41,7 +47,30 @@ function updateControls() {
   runButton.disabled = busy || !loadedImage || !vectorizer?.session;
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
+  joinDistance.disabled = showOriginal.disabled = resetJoining.disabled = downloadSvgButton.disabled;
 }
+
+function clearJoiningPreview() {
+  originalLayer.replaceChildren();
+  joiningSummary.textContent = 'Run the vectorizer to preview joining.';
+}
+
+function previewJoining() {
+  joinDistanceValue.textContent = `${joinDistance.value} px`;
+  originalLayer.toggleAttribute('hidden', !showOriginal.checked);
+  if (!loadedImage || !vectorizer?.strokes?.length) return;
+  const segments = vectorizer.strokes.map(strokeToQuadratic);
+  const baseline = joinQuadraticSegments(segments);
+  const paths = joinQuadraticSegments(segments, Number(joinDistance.value));
+  strokeLayer.replaceChildren(...paths.map(createQuadraticPathElement));
+  originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
+  const joins = baseline.length - paths.length;
+  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${joins} nearby joins`;
+}
+
+joinDistance.addEventListener('input', previewJoining);
+showOriginal.addEventListener('change', previewJoining);
+resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
 
 function drawInput(image) {
   inputCanvas.width = image.width;
@@ -66,6 +95,7 @@ function resetOutput() {
   if (!loadedImage) return;
   vectorizer.setImage(loadedImage);
   strokeLayer.replaceChildren();
+  clearJoiningPreview();
   outputSvg.setAttribute('viewBox', `0 0 ${loadedImage.width} ${loadedImage.height}`);
   displayedStrokeCount = 0;
   stepsMetric.textContent = strokesMetric.textContent = '0';
@@ -132,6 +162,7 @@ async function loadMode() {
   vectorizer = new BrowserVectorizer({ mode });
   loadedImage = null;
   strokeLayer.replaceChildren();
+  clearJoiningPreview();
   displayedStrokeCount = 0;
   if (oldSession) await oldSession.release();
   try {
@@ -194,12 +225,13 @@ runButton.addEventListener('click', () => perform(async () => {
   updateStrokePreview(loadedImage.width, displayedStrokeCount);
   stepsMetric.textContent = String(result.totalSteps);
   strokesMetric.textContent = String(result.strokeCount);
+  previewJoining();
   setStatus(`Finished ${result.totalSteps} steps in ${((performance.now() - start) / 1000).toFixed(1)}s.`);
 }));
 
 downloadSvgButton.addEventListener('click', () => {
   if (!loadedImage || !vectorizer?.strokes.length) return;
-  downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height);
+  downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', { joinDistance: Number(joinDistance.value) });
 });
 
 perform(loadMode);

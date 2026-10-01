@@ -72,3 +72,29 @@ within those long paths, measured against this uniform-width joined SVG. Keep
 short features, gaps, and junctions explicit. Try independently validated error
 budgets before considering overlap consolidation; joining alone does not show
 which overlaps are redundant. No refitting or overlap removal is implemented.
+
+## Configurable nearby joining
+
+The browser now offers a 0–20 image-pixel **Join distance** slider with live
+preview after inference. At zero it retains the exact-joining baseline. Positive
+values greedily match the closest free endpoints of separate paths, regardless
+of draw order or orientation. Paths can be reversed; gaps get straight line
+connectors, preserving the existing quadratic shapes. Each endpoint is matched
+at most once; closed contours are excluded, and new cycles are not forced.
+This is endpoint joining, not snapping, refitting, or overlap consolidation.
+
+For the saved 640×640 example, measured path counts are:
+
+| Distance (image pixels) | Paths | Added connectors |
+| --- | --- | --- |
+| 0 | 18 | 0 |
+| 2 | 18 | 0 |
+| 4 | 14 | 4 |
+| 8 | 14 | 4 |
+| 12 | 13 | 5 |
+| 20 | 7 | 11 |
+
+These counts are structural measurements, not fidelity ratings. Higher values
+can connect separate details. Use the original overlay and inspect the result.
+Lowering the slider recomputes from source strokes; it never accumulates edits.
+The download uses the current threshold but excludes the blue overlay.

@@ -122,14 +122,31 @@ behavior.
 
 Each pen-down model step is stored as its quadratic control/end parameters,
 starting cursor, patch window, image size, and previous/current width. The
-preview and **Download SVG** button convert each varying-width sampled stroke
-into vector path geometry. The SVG includes a white background and scales with
-its `viewBox`; it does not embed the source image. Stroke outlines approximate
-the model's raster circles closely while staying editable/vector.
+preview and **Download SVG** button represent each pen-down segment as one
+quadratic Bézier path (`M … Q …`), with no fill, a uniform `stroke-width="3.5"`,
+and round caps and joins. The SVG includes a white background and scales with
+its `viewBox`; it does not embed the source image.
+
+Coordinates follow `tools/svg_conversion.py`: start at the recorded cursor in
+image coordinates, add the predicted column/row offsets times half the window
+size for the endpoint, and interpolate each control coordinate using its model
+parameter. Endpoints are not quantized to raster samples or clamped to the image.
+This uses Python's `single` path structure with the fixed width of its `cluster`
+mode. Continuous segments are not grouped into longer paths yet.
+
+Predicted widths and within-segment taper are intentionally discarded for SVG
+display and export. Consequently these SVGs differ visually from the model's
+variable-width raster output and the paper's results; disclose this difference
+when using the SVGs for qualitative comparisons. Older exports used 100 filled
+circle subpaths per segment; new exports contain only the quadratic centerline.
 
 The model still needs the accumulated raster canvas at every inference step as
 part of its input. That feedback remains in a numeric buffer. The output preview
 is SVG, so no output canvas image is needed or embedded in the downloaded file.
+The inference rasterizer still uses the predicted widths and sampled circles.
+
+Future consolidation research is recorded in
+[stroke-consolidation-notes.md](stroke-consolidation-notes.md).
 
 The demo defaults to the original clean sampler's 10 rounds of up to 500 steps,
 with a round ending after 12 consecutive pen-up steps. Cursor selection uses

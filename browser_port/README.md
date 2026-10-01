@@ -124,7 +124,7 @@ Each pen-down model step is stored as its quadratic control/end parameters,
 starting cursor, patch window, image size, and previous/current width. The
 preview and **Download SVG** button join consecutive pen-down segments into
 multi-segment quadratic Bézier paths (`M … Q … Q …`), with no fill, a uniform `stroke-width="3.5"`,
-and round caps and joins. The SVG includes a white background and scales with
+and round caps and joins. The SVG has a transparent background and scales with
 its `viewBox`; it does not embed the source image.
 
 Coordinates follow `tools/svg_conversion.py`: start at the recorded cursor in

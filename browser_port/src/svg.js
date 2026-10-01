@@ -80,7 +80,7 @@ export function appendStrokePathElement(layer, stroke, previousStroke) {
 export function buildQuadraticSvg(segments, width, height = width) {
   const style = Object.entries(PATH_STYLE).map(([name, value]) => `${name}="${value}"`).join(' ');
   const body = joinQuadraticSegments(segments).map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#fff"/>${body}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
 
 export function buildStrokeSvg(strokes, width, height = width) {

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virtual Sketching — ONNX browser demo</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">Virtual Sketching / ONNX Runtime Web</p>
+        <h1>Raster image to vector strokes</h1>
+        <p class="lede">
+          The model runs one recurrent step at a time in the browser. JavaScript
+          owns the crop, raster feedback, cursor, and stroke-rendering loop.
+          Completed strokes are also kept as vector geometry for SVG export.
+        </p>
+      </header>
+
+      <section class="controls" aria-label="Vectorizer controls">
+        <label class="step-control">
+          <span>Input type</span>
+          <select id="mode-input" aria-describedby="mode-description">
+            <option value="line">Line drawing</option>
+            <option value="rough">Rough sketch</option>
+            <option value="photo">Photo (portraits)</option>
+          </select>
+        </label>
+        <label class="file-picker">
+          <span id="input-label">Input clean line drawing</span>
+          <input id="image-input" type="file" accept="image/*" />
+        </label>
+        <button id="sample-button" type="button" class="secondary">Load bundled duck</button>
+        <button id="run-button" type="button" disabled>Run vectorizer</button>
+        <button id="reset-button" type="button" class="secondary" disabled>
+          Reset
+        </button>
+        <button id="download-svg-button" type="button" class="secondary" disabled>Download SVG</button>
+        <label class="step-control">
+          <span>Rounds</span>
+          <input id="rounds-input" type="number" min="1" max="12" value="10" />
+        </label>
+        <label class="step-control">
+          <span>Steps / round</span>
+          <input id="steps-input" type="number" min="1" max="500" value="500" />
+        </label>
+      </section>
+
+      <p id="mode-description" class="mode-description"></p>
+      <p id="status" class="status" role="status">Loading ONNX model…</p>
+      <button id="retry-button" type="button" class="secondary" hidden>Retry model loading</button>
+
+      <section class="workbench">
+        <figure>
+          <figcaption>Input</figcaption>
+          <canvas id="input-canvas" width="512" height="512"></canvas>
+        </figure>
+        <figure>
+          <figcaption>Generated vector strokes</figcaption>
+          <svg id="output-svg" role="img" aria-label="Generated vector strokes" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#fff" />
+            <g id="stroke-layer" fill="#000" fill-rule="nonzero"></g>
+          </svg>
+        </figure>
+      </section>
+
+      <section class="metrics" aria-live="polite">
+        <div><span>Model</span><strong id="model-metric">loading</strong></div>
+        <div><span>Image size</span><strong id="size-metric">—</strong></div>
+        <div><span>Steps</span><strong id="steps-metric">—</strong></div>
+        <div><span>Strokes</span><strong id="strokes-metric">—</strong></div>
+      </section>
+
+      <details>
+        <summary>Integration notes</summary>
+        <p>
+          Line drawing uses the clean-line checkpoint and multi-round tracing.
+          Rough sketch uses its own RGB checkpoint with 10 rounds of up to 128
+          steps and random cursor movements between rounds.
+          Photo uses the separate RGB face checkpoint and one fixed-length pass
+          (100 steps by default). Photo mode is portrait-focused, not a general
+          scene vectorizer. Models load locally on demand; uploaded images stay
+          in your browser and are never sent to a server.
+        </p>
+      </details>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

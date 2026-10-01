@@ -1,0 +1,22 @@
+{
+  "name": "virtual-sketching-browser",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prepare-model": "node scripts/prepare-model.mjs",
+    "dev": "npm run prepare-model && vite",
+    "build": "npm run prepare-model && vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs",
+    "test:parity": "node scripts/check-parity.mjs",
+    "test:photo-parity": "node scripts/check-photo-parity.mjs",
+    "test:rough-parity": "node scripts/check-photo-parity.mjs --rough"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.23.2"
+  },
+  "devDependencies": {
+    "vite": "6.3.5"
+  }
+}

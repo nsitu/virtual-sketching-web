@@ -9,6 +9,18 @@
 
 body { margin: 0; min-width: 320px; }
 
+.source-notice {
+  padding: 11px 16px;
+  border-bottom: 1px solid #293652;
+  background: #151d31;
+  color: #aebbd4;
+  font-size: .88rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.source-notice a { color: #9eb2ff; font-weight: 700; text-underline-offset: 3px; }
+.source-notice a:hover { color: #c7d2ff; }
+
 .app-shell { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 56px 0 72px; }
 .hero { max-width: 720px; }
 .eyebrow { color: #8da8ff; font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }

@@ -162,6 +162,15 @@ inference completes; changing distance does not rerun or modify model inference.
 Distance alone cannot infer intended contours; inspect larger thresholds for
 connections between distinct details, especially around junctions.
 
+**Remove redundant strokes** is enabled by default and runs before joining.
+Its 1–12 pixel **Redundancy tolerance** slider starts at a conservative 3
+pixels. The pass samples each quadratic centerline and removes a shorter
+segment only when most of it is already covered by an aligned segment from a
+different continuous path. It skips same-path turns and sharp curves, then
+recomputes from the untouched model records whenever the checkbox or slider
+changes. Larger tolerances allow more aggressive pruning and may remove small
+details. The download uses the same survivor set as the preview.
+
 **Redraw with fitted curves** is an optional second pass after joining. It
 samples each joined path and uses the MIT-licensed [`fit-curve`](https://github.com/soswow/fit-curve)
 implementation of Schneider's curve-fitting algorithm to produce cubic Bézier

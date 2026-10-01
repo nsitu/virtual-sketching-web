@@ -120,3 +120,41 @@ can connect separate details. Use the original overlay and inspect the result.
 Lowering the slider recomputes from source strokes; it never accumulates edits.
 The download uses the current threshold and midpoint setting but excludes the
 orange overlay.
+
+## Redundancy pruning assessment (2026-10-01)
+
+Redundancy removal should operate on the model's individual centerline
+segments before nearby joining and curve redraw. Joining first would hide the
+identity of the candidate segment and could make a deleted segment look like a
+new, unintended connector. The final order should be:
+
+1. score and conservatively remove redundant source segments;
+2. join the surviving segments using the existing endpoint and midpoint rules;
+3. optionally redraw the resulting paths with the fitted-curve pass.
+
+A one-off geometric scan of the saved `example-result.svg` used the uniform
+3.5-pixel display width as a proximity scale. It found one convincing
+cross-path near-duplicate: zero-based segments 7 and 114 lie within about 1.5
+pixels on average and cover nearly the same short mark. The next closest pairs are
+adjacent segments that turn back along an existing contour; their centerline
+proximity does not make either one redundant. This means a global
+"delete anything nearby" rule would remove corners, loops, or crossings.
+
+The safer first implementation should use a candidate score rather than a
+single distance threshold. For each segment, sample its centerline and look
+for another segment (or already accepted path) that covers most samples within
+an epsilon, has a compatible tangent direction, and is not merely sharing an
+endpoint. Reject candidates at sharp turns, near junctions, or when removal
+would create a new bridge across a pen-up or round boundary. Then validate a
+greedy deletion against a rasterized union: keep the deletion only when the
+lost ink stays below a small user-facing error budget. This directly measures
+the visible result and protects small details better than centerline distance
+alone.
+
+The browser now exposes this as a **Remove redundant strokes** preview, checked
+by default with a conservative 3-pixel tolerance slider. It reports the
+removed-segment count and uses exactly the same survivor set for download. The
+orange original overlay remains available for inspection. If the example
+produces too few deletions under these safeguards, the next step should be
+curve consolidation of parallel partial overlaps rather than a more aggressive
+deletion rule.

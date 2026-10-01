@@ -62,6 +62,9 @@
         <p id="join-help">After a run, adjust the distance to join nearby path ends. Midpoint mode moves both ends to their shared midpoint; uncheck it to add a short connecting line instead. 0 keeps exact joining. Distance is in image pixels; larger values can connect separate details.</p>
         <div class="joining-actions">
           <label><input id="midpoint-joining" type="checkbox" checked disabled /> Join at midpoint</label>
+          <label><input id="remove-redundant" type="checkbox" checked disabled /> Remove redundant strokes</label>
+          <label for="redundancy-tolerance">Redundancy tolerance <output id="redundancy-tolerance-value" for="redundancy-tolerance">3 px</output></label>
+          <input id="redundancy-tolerance" type="range" min="1" max="12" step="0.5" value="3" disabled aria-describedby="redundancy-help" />
           <label><input id="redraw-curves" type="checkbox" disabled /> Redraw with fitted curves</label>
           <label for="fit-tolerance">Fidelity <output id="fit-tolerance-value" for="fit-tolerance">1 px²</output> Smoothness</label>
           <input id="fit-tolerance" type="range" min="0.25" max="32" step="0.25" value="1" disabled aria-describedby="fit-help" />
@@ -70,6 +73,7 @@
           <span id="joining-summary" role="status">Run the vectorizer to preview joining.</span>
         </div>
         <p id="fit-help">Redraw samples each joined path and fits cubic Bézier curves. Lower tolerance preserves more detail; higher tolerance smooths more aggressively.</p>
+        <p id="redundancy-help">Higher tolerance removes more short paths whose sampled centerlines are already covered by aligned strokes from another contour. The original records are preserved while the preview is recomputed.</p>
         <p id="color-help">Preview paths use distinct colors to make joined geometry easier to follow; downloaded SVG paths remain black.</p>
       </section>
 

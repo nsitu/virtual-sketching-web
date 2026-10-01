@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath, createPathElement, previewPathColor } from '../src/svg.js';
+import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, removeRedundantSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath, createPathElement, previewPathColor } from '../src/svg.js';
 import { BrowserVectorizer } from '../src/model.js';
 
 const stroke = {
@@ -186,6 +186,24 @@ test('preview path colors are stable and can override the export style', () => {
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
   }
+});
+
+test('redundancy pruning removes a covered cross-path segment but preserves source records', () => {
+  const keeper = line([0, 0], [20, 0]);
+  const duplicate = { ...line([0, 1], [20, 1]), control: [10, 1] };
+  const source = [keeper, duplicate];
+  const original = JSON.stringify(source);
+  assert.equal(removeRedundantSegments(source, 2).length, 1);
+  assert.equal(JSON.stringify(source), original);
+  assert.equal(removeRedundantSegments(source, 0).length, 2);
+  assert.throws(() => removeRedundantSegments(source, -1), RangeError);
+  assert.equal((buildQuadraticSvg(source, 40, 40, { removeRedundant: true, redundancyTolerance: 2 }).match(/<path\b/g) || []).length, 1);
+});
+
+test('redundancy pruning does not compare segments within one continuous path', () => {
+  const first = line([0, 0], [10, 0]);
+  const returning = { ...line([10, 0], [0, 0]), startsNewPath: false };
+  assert.equal(removeRedundantSegments([first, returning], 12).length, 2);
 });
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {

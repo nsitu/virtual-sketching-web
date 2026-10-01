@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, removeRedundantSegments, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -26,6 +26,9 @@ const joinDistance = element('join-distance');
 const joinDistanceValue = element('join-distance-value');
 const showOriginal = element('show-original');
 const midpointJoining = element('midpoint-joining');
+const removeRedundant = element('remove-redundant');
+const redundancyTolerance = element('redundancy-tolerance');
+const redundancyToleranceValue = element('redundancy-tolerance-value');
 const redrawCurves = element('redraw-curves');
 const fitTolerance = element('fit-tolerance');
 const fitToleranceValue = element('fit-tolerance-value');
@@ -51,7 +54,8 @@ function updateControls() {
   runButton.disabled = busy || !loadedImage || !vectorizer?.session;
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
-  joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = downloadSvgButton.disabled;
+  joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = removeRedundant.disabled = downloadSvgButton.disabled;
+  redundancyTolerance.disabled = downloadSvgButton.disabled || !removeRedundant.checked;
   redrawCurves.disabled = downloadSvgButton.disabled;
   fitTolerance.disabled = downloadSvgButton.disabled || !redrawCurves.checked;
 }
@@ -63,26 +67,33 @@ function clearJoiningPreview() {
 
 function previewJoining() {
   joinDistanceValue.textContent = `${joinDistance.value} px`;
+  redundancyToleranceValue.textContent = `${redundancyTolerance.value} px`;
   fitToleranceValue.textContent = `${fitTolerance.value} px²`;
   originalLayer.toggleAttribute('hidden', !showOriginal.checked);
   if (!loadedImage || !vectorizer?.strokes?.length) return;
   const segments = vectorizer.strokes.map(strokeToQuadratic);
   const baseline = joinQuadraticSegments(segments);
-  const joinedPaths = joinQuadraticSegments(segments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
+  const reducedSegments = removeRedundant.checked
+    ? removeRedundantSegments(segments, Number(redundancyTolerance.value)) : segments;
+  const exactReducedPaths = joinQuadraticSegments(reducedSegments);
+  const joinedPaths = joinQuadraticSegments(reducedSegments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
   const paths = redrawCurves.checked ? redrawQuadraticPaths(joinedPaths, Number(fitTolerance.value)) : joinedPaths;
   strokeLayer.replaceChildren(...paths.map((path, index) => createPathElement(path, { stroke: previewPathColor(index) })));
   originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
-  const joins = baseline.length - paths.length;
+  const removed = segments.length - reducedSegments.length;
+  const joins = exactReducedPaths.length - joinedPaths.length;
   const segmentCount = pathSet => pathSet.reduce((count, path) => count + path.length, 0);
   const redrawSummary = redrawCurves.checked
     ? ` · ${segmentCount(joinedPaths)} → ${segmentCount(paths)} cubic segments`
     : ` · ${segmentCount(paths)} segments`;
-  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${joins} nearby joins${redrawSummary}`;
+  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${removed} redundant strokes removed · ${joins} nearby joins${redrawSummary}`;
 }
 
 joinDistance.addEventListener('input', previewJoining);
 showOriginal.addEventListener('change', previewJoining);
 midpointJoining.addEventListener('change', previewJoining);
+removeRedundant.addEventListener('change', () => { updateControls(); previewJoining(); });
+redundancyTolerance.addEventListener('input', previewJoining);
 redrawCurves.addEventListener('change', () => { updateControls(); previewJoining(); });
 fitTolerance.addEventListener('input', previewJoining);
 resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
@@ -248,6 +259,7 @@ downloadSvgButton.addEventListener('click', () => {
   if (!loadedImage || !vectorizer?.strokes.length) return;
   downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', {
     joinDistance: Number(joinDistance.value), midpoint: midpointJoining.checked,
+    removeRedundant: removeRedundant.checked, redundancyTolerance: Number(redundancyTolerance.value),
     redraw: redrawCurves.checked, fitTolerance: Number(fitTolerance.value),
   });
 });

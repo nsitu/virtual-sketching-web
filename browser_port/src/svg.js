@@ -147,6 +147,88 @@ function sampleQuadratic(segment, sampleCount = 16) {
   return points;
 }
 
+function segmentLength(segment, sampleCount = 16) {
+  const points = sampleQuadratic(segment, sampleCount);
+  let length = 0;
+  for (let i = 1; i < points.length; i++) {
+    length += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+  }
+  return length;
+}
+
+function segmentTangent(segment, t = .5) {
+  const first = [segment.control[0] - segment.start[0], segment.control[1] - segment.start[1]];
+  const second = [segment.end[0] - segment.control[0], segment.end[1] - segment.control[1]];
+  const tangent = [2 * ((1 - t) * first[0] + t * second[0]), 2 * ((1 - t) * first[1] + t * second[1])];
+  if (Math.hypot(...tangent) > 1e-8) return tangent;
+  return [segment.end[0] - segment.start[0], segment.end[1] - segment.start[1]];
+}
+
+function angleBetween(a, b) {
+  const aLength = Math.hypot(...a), bLength = Math.hypot(...b);
+  if (aLength < 1e-8 || bLength < 1e-8) return Math.PI;
+  return Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1]) / (aLength * bLength))));
+}
+
+function bounds(points) {
+  return points.reduce((box, [x, y]) => ({
+    minX: Math.min(box.minX, x), maxX: Math.max(box.maxX, x),
+    minY: Math.min(box.minY, y), maxY: Math.max(box.maxY, y),
+  }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+}
+
+function boxesMayOverlap(a, b, padding) {
+  return a.minX <= b.maxX + padding && a.maxX + padding >= b.minX
+    && a.minY <= b.maxY + padding && a.maxY + padding >= b.minY;
+}
+
+function sameContinuousPath(segments) {
+  const ids = [];
+  let pathId = -1, previous;
+  for (const segment of segments) {
+    if (!canJoin(previous, segment)) pathId++;
+    ids.push(pathId);
+    previous = segment;
+  }
+  return ids;
+}
+
+function coversSegment(candidate, keeper, tolerance) {
+  // A near crossing is not redundant: the centerline directions must agree.
+  if (Math.abs(Math.cos(angleBetween(candidate.tangent, keeper.tangent))) < Math.cos(Math.PI / 3)) return false;
+  // Avoid deleting a visibly curved corner in favor of a straight neighbor.
+  const candidateTurn = angleBetween(segmentTangent(candidate.segment, 0), segmentTangent(candidate.segment, 1));
+  if (candidateTurn > Math.PI / 2) return false;
+  if (!boxesMayOverlap(candidate.box, keeper.box, tolerance)) return false;
+  const distances = candidate.points.map(point => Math.min(...keeper.points.map(other => Math.hypot(point[0] - other[0], point[1] - other[1]))));
+  const coverage = distances.filter(distance => distance <= tolerance).length / distances.length;
+  const average = distances.reduce((sum, distance) => sum + distance, 0) / distances.length;
+  return coverage >= .8 && average <= tolerance * .8;
+}
+
+// Remove whole source segments only when a longer segment from another
+// continuous path already covers nearly all of their centerline. The original
+// records are left untouched so changing the tolerance recomputes from the
+// model output rather than accumulating deletions.
+export function removeRedundantSegments(segments, tolerance = 3) {
+  if (!Number.isFinite(tolerance) || tolerance < 0) throw new RangeError('Redundancy tolerance must be a finite, nonnegative number.');
+  if (tolerance === 0 || segments.length < 2) return segments.slice();
+  const pathIds = sameContinuousPath(segments);
+  const entries = segments.map((segment, index) => {
+    const points = sampleQuadratic(segment, 12);
+    return {
+      segment, index, pathId: pathIds[index], points, box: bounds(points),
+      tangent: segmentTangent(segment), length: segmentLength(segment, 12),
+    };
+  }).sort((a, b) => b.length - a.length || a.index - b.index);
+  const kept = [];
+  for (const candidate of entries) {
+    const redundant = kept.some(keeper => keeper.pathId !== candidate.pathId && coversSegment(candidate, keeper, tolerance));
+    if (!redundant) kept.push(candidate);
+  }
+  return kept.sort((a, b) => a.index - b.index).map(entry => entry.segment);
+}
+
 export function sampleQuadraticPath(segments, samplesPerSegment = 16) {
   const points = [];
   for (const segment of segments) {
@@ -206,9 +288,10 @@ export function appendStrokePathElement(layer, stroke, previousStroke) {
   }
 }
 
-export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true, redraw = false, fitTolerance = 1 } = {}) {
+export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true, redraw = false, fitTolerance = 1, removeRedundant = false, redundancyTolerance = 3 } = {}) {
   const style = Object.entries(PATH_STYLE).map(([name, value]) => `${name}="${value}"`).join(' ');
-  const joined = joinQuadraticSegments(segments, joinDistance, { midpoint });
+  const source = removeRedundant ? removeRedundantSegments(segments, redundancyTolerance) : segments;
+  const joined = joinQuadraticSegments(source, joinDistance, { midpoint });
   const paths = redraw ? redrawQuadraticPaths(joined, fitTolerance) : joined;
   const body = paths.map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;

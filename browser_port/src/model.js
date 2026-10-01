@@ -48,7 +48,7 @@ export class BrowserVectorizer {
   async load() {
     // Vite does not automatically publish package WASM files. The prepare
     // script copies them to this stable public path before dev/build.
-    ort.env.wasm.wasmPaths = '/ort-wasm/';
+    ort.env.wasm.wasmPaths = `${import.meta.env?.BASE_URL ?? '/'}ort-wasm/`;
     const response = await fetch(this.modelUrl);
     if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
       throw new Error(`ONNX asset unavailable: ${this.modelUrl} (HTTP ${response.status}).`);

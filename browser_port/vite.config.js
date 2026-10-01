@@ -9,6 +9,9 @@ const ortWasmDir = resolve(configDir, 'public', 'ort-wasm');
 const modelDir = resolve(configDir, 'public', 'models');
 
 export default defineConfig({
+  // GitHub project pages are served below /<repository-name>/; local Vite
+  // development and preview continue to use the site root.
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [{
     name: 'serve-inference-assets',
     configureServer(server) {

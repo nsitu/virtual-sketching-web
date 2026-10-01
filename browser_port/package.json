@@ -14,6 +14,7 @@
     "test:rough-parity": "node scripts/check-photo-parity.mjs --rough"
   },
   "dependencies": {
+    "fit-curve": "^0.2.0",
     "onnxruntime-web": "1.23.2"
   },
   "devDependencies": {

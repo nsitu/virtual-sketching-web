@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createQuadraticPathElement } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, createPathElement, redrawQuadraticPaths } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -26,6 +26,9 @@ const joinDistance = element('join-distance');
 const joinDistanceValue = element('join-distance-value');
 const showOriginal = element('show-original');
 const midpointJoining = element('midpoint-joining');
+const redrawCurves = element('redraw-curves');
+const fitTolerance = element('fit-tolerance');
+const fitToleranceValue = element('fit-tolerance-value');
 const resetJoining = element('reset-joining');
 const joiningSummary = element('joining-summary');
 const originalLayer = element('original-layer');
@@ -49,6 +52,8 @@ function updateControls() {
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
   joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = downloadSvgButton.disabled;
+  redrawCurves.disabled = downloadSvgButton.disabled;
+  fitTolerance.disabled = downloadSvgButton.disabled || !redrawCurves.checked;
 }
 
 function clearJoiningPreview() {
@@ -58,20 +63,28 @@ function clearJoiningPreview() {
 
 function previewJoining() {
   joinDistanceValue.textContent = `${joinDistance.value} px`;
+  fitToleranceValue.textContent = `${fitTolerance.value} px²`;
   originalLayer.toggleAttribute('hidden', !showOriginal.checked);
   if (!loadedImage || !vectorizer?.strokes?.length) return;
   const segments = vectorizer.strokes.map(strokeToQuadratic);
   const baseline = joinQuadraticSegments(segments);
-  const paths = joinQuadraticSegments(segments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
-  strokeLayer.replaceChildren(...paths.map(createQuadraticPathElement));
+  const joinedPaths = joinQuadraticSegments(segments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
+  const paths = redrawCurves.checked ? redrawQuadraticPaths(joinedPaths, Number(fitTolerance.value)) : joinedPaths;
+  strokeLayer.replaceChildren(...paths.map(createPathElement));
   originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
   const joins = baseline.length - paths.length;
-  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${joins} nearby joins`;
+  const segmentCount = pathSet => pathSet.reduce((count, path) => count + path.length, 0);
+  const redrawSummary = redrawCurves.checked
+    ? ` · ${segmentCount(joinedPaths)} → ${segmentCount(paths)} cubic segments`
+    : ` · ${segmentCount(paths)} segments`;
+  joiningSummary.textContent = `${baseline.length} → ${paths.length} paths · ${joins} nearby joins${redrawSummary}`;
 }
 
 joinDistance.addEventListener('input', previewJoining);
 showOriginal.addEventListener('change', previewJoining);
 midpointJoining.addEventListener('change', previewJoining);
+redrawCurves.addEventListener('change', () => { updateControls(); previewJoining(); });
+fitTolerance.addEventListener('input', previewJoining);
 resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
 
 function drawInput(image) {
@@ -235,6 +248,7 @@ downloadSvgButton.addEventListener('click', () => {
   if (!loadedImage || !vectorizer?.strokes.length) return;
   downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', {
     joinDistance: Number(joinDistance.value), midpoint: midpointJoining.checked,
+    redraw: redrawCurves.checked, fitTolerance: Number(fitTolerance.value),
   });
 });
 

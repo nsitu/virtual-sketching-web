@@ -46,9 +46,10 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .joining-controls output { color: #9eb2ff; font-variant-numeric: tabular-nums; }
 .joining-controls input[type="range"] { width: 100%; margin: 16px 0 4px; accent-color: #8da8ff; }
 .joining-controls p { color: #aebbd4; font-size: .85rem; margin: 6px 0 14px; }
+.joining-controls #fit-help { margin-top: 14px; }
 .joining-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; font-size: .85rem; }
 #joining-summary { color: #aebbd4; }
-#original-layer path { stroke: #1674dd; stroke-opacity: .65; stroke-width: 1.5; }
+#original-layer path { stroke: #f08a24; stroke-opacity: .8; stroke-width: 1.75; }
 #original-layer[hidden] { display: none; }
 .workbench { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px; }
 figure { margin: 0; }

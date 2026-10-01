@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg } from '../src/svg.js';
+import { appendStrokePathElement, buildStrokeSvg, strokeToSvgPath, joinQuadraticSegments, quadraticPathData, buildQuadraticSvg, fitQuadraticPath, redrawQuadraticPaths, sampleQuadraticPath } from '../src/svg.js';
 import { BrowserVectorizer } from '../src/model.js';
 
 const stroke = {
@@ -133,6 +133,40 @@ test('configured export serializes the same nearby paths as preview geometry wit
     assert.deepEqual([...svg.matchAll(/ d="([^"]+)"/g)].map(m => m[1]), expected);
     assert.doesNotMatch(svg, /<rect\b/);
   }
+});
+
+test('redraw samples joined quadratics and emits cubic curves with preserved endpoints', () => {
+  const segments = [line([0, 0], [10, 0]), { ...line([10, 0], [20, 10]), control: [12, 8] }];
+  const points = sampleQuadraticPath(segments);
+  assert.equal(points.length, 33);
+  const fitted = fitQuadraticPath(segments, 1);
+  assert.ok(fitted.length >= 1);
+  assert.deepEqual(fitted[0].start, [0, 0]);
+  assert.deepEqual(fitted.at(-1).end, [20, 10]);
+  assert.ok(fitted.every(segment => segment.type === 'cubic'));
+  const svg = buildQuadraticSvg(segments, 100, 100, { redraw: true, fitTolerance: 1 });
+  assert.match(svg, /C/);
+  assert.doesNotMatch(svg, /<rect\b/);
+});
+
+test('fidelity tolerance controls the number of fitted cubic segments', () => {
+  const points = Array.from({ length: 41 }, (_, i) => {
+    const x = i * 2.5;
+    return [x, Math.sin(i / 3) * 8 + i * .35];
+  });
+  const source = points.slice(0, -1).map((start, i) => ({
+    start, control: [start[0] + .8, start[1]], end: points[i + 1],
+  }));
+  const low = redrawQuadraticPaths([source], .25)[0];
+  const high = redrawQuadraticPaths([source], 16)[0];
+  assert.ok(low.length >= high.length, `${low.length} should be >= ${high.length}`);
+  assert.deepEqual(low[0].start, source[0].start);
+  assert.deepEqual(high.at(-1).end, source.at(-1).end);
+});
+
+test('invalid redraw tolerance is rejected', () => {
+  assert.throws(() => buildQuadraticSvg([], 100, 100, { redraw: true, fitTolerance: -1 }), RangeError);
+  assert.throws(() => redrawQuadraticPaths([], NaN), RangeError);
 });
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {

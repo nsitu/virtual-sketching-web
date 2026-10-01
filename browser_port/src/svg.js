@@ -1,4 +1,5 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
+import fitCurve from 'fit-curve';
 
 // Use the uniform width and continuous path structure of Python's cluster export.
 const PATH_STYLE = {
@@ -30,6 +31,10 @@ export function strokeToQuadratic(stroke) {
 
 const pointText = point => point.map(value => value.toFixed(3)).join(' ');
 const curveText = segment => `Q${pointText(segment.control)} ${pointText(segment.end)}`;
+
+function cubicText(segment) {
+  return `C${pointText(segment.control1)} ${pointText(segment.control2)} ${pointText(segment.end)}`;
+}
 
 function canJoin(previous, next) {
   // Equality at export precision only: never bridge gaps or alter controls.
@@ -118,8 +123,45 @@ export function quadraticPathData(segments) {
   return `M${pointText(segments[0].start)}${segments.map((segment, i) => {
     const bridge = i && pointText(segments[i - 1].end) !== pointText(segment.start)
       ? `L${pointText(segment.start)}` : '';
-    return bridge + curveText(segment);
+    return bridge + (segment.type === 'cubic' ? cubicText(segment) : curveText(segment));
   }).join('')}`;
+}
+
+function sampleQuadratic(segment, sampleCount = 16) {
+  const points = [];
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = i / sampleCount, u = 1 - t;
+    points.push([
+      u * u * segment.start[0] + 2 * u * t * segment.control[0] + t * t * segment.end[0],
+      u * u * segment.start[1] + 2 * u * t * segment.control[1] + t * t * segment.end[1],
+    ]);
+  }
+  return points;
+}
+
+export function sampleQuadraticPath(segments, samplesPerSegment = 16) {
+  const points = [];
+  for (const segment of segments) {
+    const samples = sampleQuadratic(segment, samplesPerSegment);
+    if (points.length) samples.shift();
+    points.push(...samples);
+  }
+  return points;
+}
+
+export function fitQuadraticPath(segments, maxError = 1) {
+  if (!segments.length) return [];
+  const points = sampleQuadraticPath(segments);
+  if (points.length < 2) return [];
+  const fitted = fitCurve(points, maxError);
+  return fitted.map(([start, control1, control2, end]) => ({
+    type: 'cubic', start, control1, control2, end,
+  }));
+}
+
+export function redrawQuadraticPaths(paths, maxError = 1) {
+  if (!Number.isFinite(maxError) || maxError < 0) throw new RangeError('Fit tolerance must be a finite, nonnegative number.');
+  return paths.map(path => fitQuadraticPath(path, maxError)).filter(path => path.length);
 }
 
 export function strokeToSvgPath(stroke) {
@@ -131,6 +173,10 @@ export function createStrokePathElement(stroke) {
 }
 
 export function createQuadraticPathElement(segments) {
+  return createPathElement(segments);
+}
+
+export function createPathElement(segments) {
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', quadraticPathData(segments));
   for (const [name, value] of Object.entries(PATH_STYLE)) path.setAttribute(name, value);
@@ -150,9 +196,11 @@ export function appendStrokePathElement(layer, stroke, previousStroke) {
   }
 }
 
-export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true } = {}) {
+export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true, redraw = false, fitTolerance = 1 } = {}) {
   const style = Object.entries(PATH_STYLE).map(([name, value]) => `${name}="${value}"`).join(' ');
-  const body = joinQuadraticSegments(segments, joinDistance, { midpoint }).map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
+  const joined = joinQuadraticSegments(segments, joinDistance, { midpoint });
+  const paths = redraw ? redrawQuadraticPaths(joined, fitTolerance) : joined;
+  const body = paths.map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
 

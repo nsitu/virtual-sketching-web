@@ -71,17 +71,38 @@ The next useful experiment is corner-preserving refitting of smooth sections
 within those long paths, measured against this uniform-width joined SVG. Keep
 short features, gaps, and junctions explicit. Try independently validated error
 budgets before considering overlap consolidation; joining alone does not show
-which overlaps are redundant. No refitting or overlap removal is implemented.
+which overlaps are redundant.
+
+## Optional redraw fitting
+
+The browser now has an opt-in **Redraw with fitted curves** pass after joining.
+It samples each joined quadratic path and uses the MIT-licensed `fit-curve`
+package, a JavaScript implementation of Schneider's automatic digitized-curve
+fitting algorithm, to emit cubic Bézier paths. One squared-pixel tolerance is
+used as the user-facing **Fidelity / Smoothness** control: lower tolerance is a
+tighter redraw with more detail, while higher tolerance permits more smoothing
+and fewer cubic segments. A single error budget maps directly to the library's
+`maxError` parameter and is easier to interpret than independent controls that
+could disagree. The default is opt-in at 1 px².
+
+The pass preserves each joined path's endpoints and leaves the model stroke
+records and raster feedback untouched. It does not infer overlaps or corners;
+the fitter can smooth a true corner if the tolerance is too high. Keep the orange
+original overlay enabled while exploring thresholds and inspect small details.
+Redraw is applied after nearby joining and the same settings are used for the
+preview and SVG download.
 
 ## Configurable nearby joining
 
 The browser now offers a 0–20 image-pixel **Join distance** slider with live
 preview after inference. At zero it retains the exact-joining baseline. Positive
 values greedily match the closest free endpoints of separate paths, regardless
-of draw order or orientation. Paths can be reversed; gaps get straight line
-connectors, preserving the existing quadratic shapes. Each endpoint is matched
-at most once; closed contours are excluded, and new cycles are not forced.
-This is endpoint joining, not snapping, refitting, or overlap consolidation.
+of draw order or orientation. Paths can be reversed. With midpoint mode enabled
+by default, each matched pair is replaced by its shared midpoint while retaining
+the original quadratic controls. With midpoint mode disabled, the original ends
+remain and a straight connector is inserted. Each endpoint is matched at most
+once; closed contours are excluded, and new cycles are not forced. This is
+endpoint joining, not refitting or overlap consolidation.
 
 For the saved 640×640 example, measured path counts are:
 
@@ -97,4 +118,5 @@ For the saved 640×640 example, measured path counts are:
 These counts are structural measurements, not fidelity ratings. Higher values
 can connect separate details. Use the original overlay and inspect the result.
 Lowering the slider recomputes from source strokes; it never accumulates edits.
-The download uses the current threshold but excludes the blue overlay.
+The download uses the current threshold and midpoint setting but excludes the
+orange overlay.

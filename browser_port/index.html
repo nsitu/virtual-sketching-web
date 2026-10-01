@@ -62,10 +62,14 @@
         <p id="join-help">After a run, adjust the distance to join nearby path ends. Midpoint mode moves both ends to their shared midpoint; uncheck it to add a short connecting line instead. 0 keeps exact joining. Distance is in image pixels; larger values can connect separate details.</p>
         <div class="joining-actions">
           <label><input id="midpoint-joining" type="checkbox" checked disabled /> Join at midpoint</label>
-          <label><input id="show-original" type="checkbox" disabled /> Overlay original in blue</label>
+          <label><input id="redraw-curves" type="checkbox" disabled /> Redraw with fitted curves</label>
+          <label for="fit-tolerance">Fidelity <output id="fit-tolerance-value" for="fit-tolerance">1 px²</output> Smoothness</label>
+          <input id="fit-tolerance" type="range" min="0.25" max="32" step="0.25" value="1" disabled aria-describedby="fit-help" />
+          <label><input id="show-original" type="checkbox" disabled /> Overlay original in orange</label>
           <button id="reset-joining" type="button" class="secondary" disabled>Reset joining</button>
           <span id="joining-summary" role="status">Run the vectorizer to preview joining.</span>
         </div>
+        <p id="fit-help">Redraw samples each joined path and fits cubic Bézier curves. Lower tolerance preserves more detail; higher tolerance smooths more aggressively.</p>
       </section>
 
       <section class="workbench">

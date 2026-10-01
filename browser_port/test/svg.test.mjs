@@ -53,7 +53,7 @@ test('positive joining bridges an inclusive distance threshold without changing 
   const segments = [line([0, 0], [10, 0]), line([13, 0], [25, 0])];
   const original = JSON.stringify(segments);
   assert.equal(joinQuadraticSegments(segments, 2.99).length, 2);
-  const paths = joinQuadraticSegments(segments, 3);
+  const paths = joinQuadraticSegments(segments, 3, { midpoint: false });
   assert.equal(paths.length, 1);
   assert.equal(quadraticPathData(paths[0]), 'M0.000 0.000Q5.000 0.000 10.000 0.000L13.000 0.000Q19.000 0.000 25.000 0.000');
   assert.equal(JSON.stringify(segments), original);
@@ -65,7 +65,7 @@ test('nearby joining handles all endpoint orientations and unordered paths', () 
   const a = line([0, 0], [10, 0]), b = line([12, 0], [25, 0]);
   const reverse = s => ({ ...s, start: s.end, end: s.start });
   for (const source of [[a, b], [a, reverse(b)], [reverse(a), b], [reverse(a), reverse(b)], [b, a]]) {
-    const paths = joinQuadraticSegments(source, 2);
+    const paths = joinQuadraticSegments(source, 2, { midpoint: false });
     assert.equal(paths.length, 1);
     assert.equal(paths[0].length, 2);
     assert.deepEqual(paths[0].map(s => s.control).sort((p, q) => p[0] - q[0]), [[5, 0], [18.5, 0]]);
@@ -77,13 +77,13 @@ test('nearby joining handles all endpoint orientations and unordered paths', () 
 
 test('nearest endpoint wins and the algorithm does not introduce branches or close cycles', () => {
   const segments = [line([0, 0], [10, 0]), line([11, 0], [20, 0]), line([10, 2], [10, 12])];
-  const paths = joinQuadraticSegments(segments, 2);
+  const paths = joinQuadraticSegments(segments, 2, { midpoint: false });
   assert.equal(paths.length, 2);
   assert.deepEqual(paths[0].map(s => s.end), [[10, 0], [20, 0]]);
   // Three edges surrounding a triangle have six free endpoints. Only two joins
   // may be accepted, leaving an open path instead of forcing a closing edge.
   const triangle = [line([0, 0], [10, 0]), line([11, 1], [5, 10]), line([4, 9], [0, 1])];
-  const joined = joinQuadraticSegments(triangle, 2);
+  const joined = joinQuadraticSegments(triangle, 2, { midpoint: false });
   assert.equal(joined.length, 1);
   assert.equal(joined[0].length, 3);
   assert.equal((quadraticPathData(joined[0]).match(/L/g) || []).length, 2);
@@ -95,12 +95,44 @@ test('closed contours remain closed and distance validation rejects invalid tole
   for (const distance of [-1, NaN, Infinity]) assert.throws(() => joinQuadraticSegments(segments, distance), RangeError);
 });
 
+test('midpoint mode defaults on and replaces endpoints without moving controls or source records', () => {
+  const a = { ...line([0, 0], [10, 2]), control: [4, 7] };
+  const b = { ...line([14, 4], [30, 10]), control: [24, -2] };
+  const reverse = s => ({ ...s, start: s.end, end: s.start });
+  for (const input of [[a, b], [a, reverse(b)], [reverse(a), b], [reverse(a), reverse(b)], [b, a]]) {
+    const original = JSON.stringify(input);
+    const [joined] = joinQuadraticSegments(input, 5);
+    assert.equal(joined.length, 2);
+    assert.deepEqual(joined[0].end, [12, 3]);
+    assert.deepEqual(joined[1].start, [12, 3]);
+    assert.deepEqual(joined.map(s => s.control).sort((p, q) => p[0] - q[0]), [[4, 7], [24, -2]]);
+    assert.doesNotMatch(quadraticPathData(joined), /L/);
+    assert.equal(JSON.stringify(input), original);
+    const bridge = joinQuadraticSegments(input, 5, { midpoint: false });
+    assert.match(quadraticPathData(bridge[0]), /L/);
+    assert.equal(joinQuadraticSegments(input, 0).length, 2);
+  }
+});
+
+test('a middle segment can snap both ends using the original endpoint matches', () => {
+  const input = [line([0, 0], [10, 0]), line([12, 0], [20, 0]), line([24, 0], [30, 0])];
+  const original = JSON.stringify(input);
+  const [joined] = joinQuadraticSegments(input, 4);
+  assert.deepEqual(joined.map(s => [s.start, s.end]), [
+    [[0, 0], [11, 0]], [[11, 0], [22, 0]], [[22, 0], [30, 0]],
+  ]);
+  assert.equal(JSON.stringify(input), original);
+  assert.equal(joinQuadraticSegments(input, 3).length, 2);
+});
+
 test('configured export serializes the same nearby paths as preview geometry with no background', () => {
   const segments = [line([0, 0], [10, 0]), line([12, 0], [20, 0])];
-  const expected = joinQuadraticSegments(segments, 2).map(quadraticPathData);
-  const svg = buildQuadraticSvg(segments, 100, 80, { joinDistance: 2 });
-  assert.deepEqual([...svg.matchAll(/ d="([^"]+)"/g)].map(m => m[1]), expected);
-  assert.doesNotMatch(svg, /<rect\b/);
+  for (const midpoint of [true, false]) {
+    const expected = joinQuadraticSegments(segments, 2, { midpoint }).map(quadraticPathData);
+    const svg = buildQuadraticSvg(segments, 100, 80, { joinDistance: 2, midpoint });
+    assert.deepEqual([...svg.matchAll(/ d="([^"]+)"/g)].map(m => m[1]), expected);
+    assert.doesNotMatch(svg, /<rect\b/);
+  }
 });
 
 test('joining preserves both quadratic commands and removes only the shared move', () => {

@@ -59,8 +59,9 @@
       <section class="joining-controls" aria-label="Join nearby paths">
         <label for="join-distance">Join distance <output id="join-distance-value" for="join-distance">0 px</output></label>
         <input id="join-distance" type="range" min="0" max="20" step="0.5" value="0" disabled aria-describedby="join-help" />
-        <p id="join-help">After a run, adjust the distance to connect nearby path ends with short lines. 0 keeps exact joining. Distance is in image pixels; larger values can connect separate details.</p>
+        <p id="join-help">After a run, adjust the distance to join nearby path ends. Midpoint mode moves both ends to their shared midpoint; uncheck it to add a short connecting line instead. 0 keeps exact joining. Distance is in image pixels; larger values can connect separate details.</p>
         <div class="joining-actions">
+          <label><input id="midpoint-joining" type="checkbox" checked disabled /> Join at midpoint</label>
           <label><input id="show-original" type="checkbox" disabled /> Overlay original in blue</label>
           <button id="reset-joining" type="button" class="secondary" disabled>Reset joining</button>
           <span id="joining-summary" role="status">Run the vectorizer to preview joining.</span>

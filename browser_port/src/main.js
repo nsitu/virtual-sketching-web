@@ -25,6 +25,7 @@ const strokesMetric = element('strokes-metric');
 const joinDistance = element('join-distance');
 const joinDistanceValue = element('join-distance-value');
 const showOriginal = element('show-original');
+const midpointJoining = element('midpoint-joining');
 const resetJoining = element('reset-joining');
 const joiningSummary = element('joining-summary');
 const originalLayer = element('original-layer');
@@ -47,7 +48,7 @@ function updateControls() {
   runButton.disabled = busy || !loadedImage || !vectorizer?.session;
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
-  joinDistance.disabled = showOriginal.disabled = resetJoining.disabled = downloadSvgButton.disabled;
+  joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = downloadSvgButton.disabled;
 }
 
 function clearJoiningPreview() {
@@ -61,7 +62,7 @@ function previewJoining() {
   if (!loadedImage || !vectorizer?.strokes?.length) return;
   const segments = vectorizer.strokes.map(strokeToQuadratic);
   const baseline = joinQuadraticSegments(segments);
-  const paths = joinQuadraticSegments(segments, Number(joinDistance.value));
+  const paths = joinQuadraticSegments(segments, Number(joinDistance.value), { midpoint: midpointJoining.checked });
   strokeLayer.replaceChildren(...paths.map(createQuadraticPathElement));
   originalLayer.replaceChildren(...(showOriginal.checked ? baseline.map(createQuadraticPathElement) : []));
   const joins = baseline.length - paths.length;
@@ -70,6 +71,7 @@ function previewJoining() {
 
 joinDistance.addEventListener('input', previewJoining);
 showOriginal.addEventListener('change', previewJoining);
+midpointJoining.addEventListener('change', previewJoining);
 resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
 
 function drawInput(image) {
@@ -231,7 +233,9 @@ runButton.addEventListener('click', () => perform(async () => {
 
 downloadSvgButton.addEventListener('click', () => {
   if (!loadedImage || !vectorizer?.strokes.length) return;
-  downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', { joinDistance: Number(joinDistance.value) });
+  downloadStrokeSvg(vectorizer.strokes, loadedImage.width, loadedImage.height, 'virtual-sketching.svg', {
+    joinDistance: Number(joinDistance.value), midpoint: midpointJoining.checked,
+  });
 });
 
 perform(loadMode);

@@ -37,7 +37,7 @@ function canJoin(previous, next) {
   return previous && !next.startsNewPath && pointText(previous.end) === pointText(next.start);
 }
 
-export function joinQuadraticSegments(segments, joinDistance = 0) {
+export function joinQuadraticSegments(segments, joinDistance = 0, { midpoint = true } = {}) {
   if (!Number.isFinite(joinDistance) || joinDistance < 0) throw new RangeError('Join distance must be a finite, nonnegative number.');
   const paths = [];
   let previous;
@@ -46,13 +46,13 @@ export function joinQuadraticSegments(segments, joinDistance = 0) {
     else paths.push([segment]);
     previous = segment;
   }
-  return joinDistance > 0 ? joinNearbyPaths(paths, joinDistance) : paths;
+  return joinDistance > 0 ? joinNearbyPaths(paths, joinDistance, midpoint) : paths;
 }
 
 // Match original path endpoints once, nearest first. Each endpoint gets at most
 // one partner; union-find prevents cycles. Spatial buckets avoid checking every
 // pair for the common case of many widely separated paths.
-function joinNearbyPaths(paths, distance) {
+function joinNearbyPaths(paths, distance, midpoint) {
   const endpoints = paths.flatMap(path => [path[0].start, path.at(-1).end]);
   const buckets = new Map(), candidates = [];
   for (let i = 0; i < endpoints.length; i++) {
@@ -93,10 +93,19 @@ function joinNearbyPaths(paths, distance) {
       const index = entry >> 1;
       visited.add(index);
       const source = paths[index];
-      if (entry % 2 === 0) path.push(...source);
-      else path.push(...source.slice().reverse().map(segment => ({
+      // Clone records before editing endpoints so toggling modes or lowering
+      // the threshold always recomputes from the untouched model geometry.
+      const part = entry % 2 === 0 ? source.map(segment => ({ ...segment }))
+        : source.slice().reverse().map(segment => ({
         ...segment, start: segment.end, end: segment.start,
-      })));
+      }));
+      if (midpoint && path.length) {
+        const a = path.at(-1).end, b = part[0].start;
+        const shared = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        path.at(-1).end = shared;
+        part[0].start = shared;
+      }
+      path.push(...part);
       entry = partners[entry ^ 1];
     }
     joined.push(path);
@@ -141,9 +150,9 @@ export function appendStrokePathElement(layer, stroke, previousStroke) {
   }
 }
 
-export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0 } = {}) {
+export function buildQuadraticSvg(segments, width, height = width, { joinDistance = 0, midpoint = true } = {}) {
   const style = Object.entries(PATH_STYLE).map(([name, value]) => `${name}="${value}"`).join(' ');
-  const body = joinQuadraticSegments(segments, joinDistance).map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
+  const body = joinQuadraticSegments(segments, joinDistance, { midpoint }).map(path => `<path ${style} d="${quadraticPathData(path)}"/>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
 

@@ -1,7 +1,7 @@
 # Future work: stroke consolidation
 
-Deferred while the SVG exporter is simplified to one quadratic centerline per
-model segment. The later goal is to replace redundant overlapping strokes and
+The SVG exporter now joins consecutive quadratic centerlines into continuous
+paths, preserving all original segments. The later goal is to replace redundant overlapping strokes and
 compatible short segments with fewer meaningful curves at low visual error.
 
 ## References
@@ -30,8 +30,9 @@ possible offline benchmarks, not drop-in ONNX Runtime Web components.
 
 Work from `BrowserVectorizer.strokes` before SVG serialization, where quadratic
 parameters, cursor positions, window sizes, and model widths are available.
-Preserve pen-up and round boundaries explicitly if using drawing continuity or
-stroke order: the current stroke array stores only pen-down segments.
+The stroke array stores only pen-down segments; `startsNewPath` now records
+pen-up and round boundaries. Legacy SVG files do not retain this metadata, so
+joining those files can only infer continuity from consecutive endpoints.
 
 Compare endpoint joining, overlap consolidation, and curve refitting while
 protecting corners, crossings, nearby distinct contours, and small details.
@@ -42,3 +43,32 @@ Validate visual error at normal and enlarged scales before choosing tolerances.
 Keep the model's variable-width raster feedback independent of any display or
 export simplification. Joining existing continuous segments into multi-segment
 paths (Python's `cluster` mode) is also distinct from consolidating overlaps.
+
+## Joining assessment (2026-10-01)
+
+`node scripts/review-svg-joining.mjs` reproduces a review using the saved
+`example-result.svg`, with a separate `example-result-joined.svg` as output.
+The input contains no pen-boundary metadata; its consecutive endpoint matches
+yield 18 paths from 115 individual paths. All 115 quadratic commands and their
+coordinates remain unchanged. Size falls from 17,584 to 5,967 bytes (66.1%).
+New model runs also respect explicit pen-up and round boundaries.
+
+In the browser comparison, the sum of absolute grayscale differences, divided
+by the original total ink, was 2.390% at 640×640 and 0.984% at 2560×2560.
+At native size, lost ink was 1.465% and added ink 0.925%; at 4×, they were
+0.533% and 0.452%. These are rendering measurements, not geometric errors or
+perceptual quality scores. Combining separately antialiased strokes into joined
+paths changes caps/joins and compositing; pixel-identical output is not promised.
+Visual inspection of the side-by-side review showed consistent overall contours.
+
+The five longest paths contain 23, 23, 16, 14, and 10 segments: 86 of the 115
+segments. Seven paths contain only one segment. Of the 97 joined vertices,
+28 have a tangent direction change greater than 30 degrees, including 14 greater
+than 60 degrees. Some represent intentional corners; these statistics are not
+an automatic corner classification.
+
+The next useful experiment is corner-preserving refitting of smooth sections
+within those long paths, measured against this uniform-width joined SVG. Keep
+short features, gaps, and junctions explicit. Try independently validated error
+budgets before considering overlap consolidation; joining alone does not show
+which overlaps are redundant. No refitting or overlap removal is implemented.

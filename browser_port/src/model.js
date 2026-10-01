@@ -82,6 +82,7 @@ export class BrowserVectorizer {
     this.previousWidth = this.minWidth;
     this.previousScaling = 1;
     this.previousWindowSize = this.rasterSize;
+    this.startsNewPath = true;
   }
 
   async step() {
@@ -130,8 +131,10 @@ export class BrowserVectorizer {
       const patch = renderStrokePatch(params, this.previousWidth, this.rasterSize);
       pastePatch(this.canvas, patch, this.cursor, imageSize, currentWindowSize, this.rasterSize);
       this.strokes.push({ params: Array.from(params), previousWidth: this.previousWidth,
-        cursor: [...this.cursor], imageSize, windowSize: currentWindowSize });
+        cursor: [...this.cursor], imageSize, windowSize: currentWindowSize,
+        startsNewPath: this.startsNewPath });
     }
+    this.startsNewPath = !stroke;
 
     const nextScaling = Math.min(this.maxScaling, Math.max(0, params[5]));
     const nextWindowSize = clamp(nextScaling * currentWindowSize, this.minWindowSize, imageSize);

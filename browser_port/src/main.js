@@ -2,7 +2,7 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
-import { createStrokePathElement, downloadStrokeSvg } from './svg.js';
+import { appendStrokePathElement, downloadStrokeSvg } from './svg.js';
 
 const element = id => document.getElementById(id);
 const input = element('image-input');
@@ -57,7 +57,7 @@ function drawInput(image) {
 function updateStrokePreview(size, fromIndex = 0) {
   outputSvg.setAttribute('viewBox', `0 0 ${size} ${size}`);
   for (let i = fromIndex; i < vectorizer.strokes.length; i++) {
-    strokeLayer.append(createStrokePathElement(vectorizer.strokes[i]));
+    appendStrokePathElement(strokeLayer, vectorizer.strokes[i], vectorizer.strokes[i - 1]);
   }
   displayedStrokeCount = vectorizer.strokes.length;
 }

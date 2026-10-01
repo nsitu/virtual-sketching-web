@@ -122,8 +122,8 @@ behavior.
 
 Each pen-down model step is stored as its quadratic control/end parameters,
 starting cursor, patch window, image size, and previous/current width. The
-preview and **Download SVG** button represent each pen-down segment as one
-quadratic Bézier path (`M … Q …`), with no fill, a uniform `stroke-width="3.5"`,
+preview and **Download SVG** button join consecutive pen-down segments into
+multi-segment quadratic Bézier paths (`M … Q … Q …`), with no fill, a uniform `stroke-width="3.5"`,
 and round caps and joins. The SVG includes a white background and scales with
 its `viewBox`; it does not embed the source image.
 
@@ -131,8 +131,13 @@ Coordinates follow `tools/svg_conversion.py`: start at the recorded cursor in
 image coordinates, add the predicted column/row offsets times half the window
 size for the endpoint, and interpolate each control coordinate using its model
 parameter. Endpoints are not quantized to raster samples or clamped to the image.
-This uses Python's `single` path structure with the fixed width of its `cluster`
-mode. Continuous segments are not grouped into longer paths yet.
+This follows Python's `cluster` path structure and fixed width. Pen-up steps
+and new rounds explicitly start new paths. A mismatch between consecutive
+endpoints at the export's three-decimal precision also starts a new path (for
+example, after cursor clamping). Older records without boundary metadata use
+endpoint continuity alone. Joining preserves every quadratic segment and control
+point; it does not snap gaps, reorder strokes, refit curves, or merge overlaps.
+The UI's stroke counter still counts model segments, not joined SVG paths.
 
 Predicted widths and within-segment taper are intentionally discarded for SVG
 display and export. Consequently these SVGs differ visually from the model's
@@ -147,6 +152,14 @@ The inference rasterizer still uses the predicted widths and sampled circles.
 
 Future consolidation research is recorded in
 [stroke-consolidation-notes.md](stroke-consolidation-notes.md).
+
+To reproduce the joining review of the saved single-segment example, run
+`node scripts/review-svg-joining.mjs` from this directory. It preserves
+`example-result.svg`, writes `example-result-joined.svg`, and generates
+`outputs/svg-joining/review.html` and `metrics.json`. Open the review through
+the local Vite server at `/outputs/svg-joining/review.html` for original/joined
+views, path coloring, and browser-rendered difference measurements at 1× and 4×.
+This review importer accepts only this demo's uniform-width, single-M/Q export.
 
 The demo defaults to the original clean sampler's 10 rounds of up to 500 steps,
 with a round ending after 12 consecutive pen-up steps. Cursor selection uses

@@ -49,6 +49,10 @@ jobs:
         working-directory: browser_port
         run: npm ci
 
+      - name: Test browser runtime
+        working-directory: browser_port
+        run: npm test
+
       - name: Build site
         working-directory: browser_port
         env:

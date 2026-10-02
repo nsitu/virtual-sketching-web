@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DRAWING_MODEL } from './src/informative-drawings-config.js';
 
 const configDir = dirname(fileURLToPath(import.meta.url));
 const ortWasmDir = resolve(configDir, 'public', 'ort-wasm');
@@ -12,6 +13,7 @@ export default defineConfig({
   // GitHub project pages are served below /<repository-name>/; local Vite
   // development and preview continue to use the site root.
   base: process.env.VITE_BASE_PATH || '/',
+  worker: { format: 'es' },
   plugins: [{
     name: 'serve-inference-assets',
     configureServer(server) {
@@ -20,7 +22,7 @@ export default defineConfig({
         // Model files are ignored by the watcher, so Vite's public-file cache
         // can miss a newly exported checkpoint until restart. Serve the
         // known artifacts directly and never return SPA HTML for missing ones.
-        if (['/models/virtual_sketching_step.onnx', '/models/virtual_sketching_faces_step.onnx', '/models/virtual_sketching_rough_step.onnx'].includes(pathname)) {
+        if (['/models/virtual_sketching_step.onnx', '/models/virtual_sketching_faces_step.onnx', '/models/virtual_sketching_rough_step.onnx', `/models/${DRAWING_MODEL.filename}`].includes(pathname)) {
           try {
             const source = readFileSync(resolve(modelDir, pathname.slice('/models/'.length)));
             response.setHeader('Content-Type', 'application/octet-stream');

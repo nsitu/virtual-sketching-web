@@ -30,6 +30,7 @@
             <option value="line">Line drawing</option>
             <option value="rough">Rough sketch</option>
             <option value="photo">Photo (portraits)</option>
+            <option value="drawing">Photo → drawing → vectors</option>
           </select>
         </label>
         <label class="file-picker">
@@ -53,6 +54,22 @@
       </section>
 
       <p id="mode-description" class="mode-description"></p>
+      <section id="drawing-controls" class="drawing-controls" aria-label="Photo to drawing" hidden>
+        <div class="drawing-actions">
+          <label class="step-control" for="drawing-resolution">Maximum photo size
+            <select id="drawing-resolution">
+              <option value="256">256 px (less memory)</option>
+              <option value="512" selected>512 px (more detail)</option>
+            </select>
+          </label>
+          <button id="generate-drawing-button" type="button" disabled>Generate drawing</button>
+          <button id="download-drawing-button" class="secondary" type="button" disabled>Download drawing PNG</button>
+        </div>
+        <label for="drawing-cutoff">Background cutoff <output id="drawing-cutoff-value" for="drawing-cutoff">0.980</output></label>
+        <input id="drawing-cutoff" type="range" min="0.9" max="1" step="0.001" value="0.98" disabled aria-describedby="drawing-help" />
+        <p id="drawing-help">Lower values remove more faint gray detail. Adjustments preview instantly; vectorize again to update the SVG. Changing the size requires generating a new drawing. Photos keep their proportions and are never enlarged.</p>
+        <p>Drawing generation uses <a href="https://github.com/carolineec/informative-drawings">Informative Drawings</a> (style 1). Processing stays in this browser.</p>
+      </section>
       <p id="status" class="status" role="status">Loading ONNX model…</p>
       <button id="retry-button" type="button" class="secondary" hidden>Retry model loading</button>
 
@@ -79,10 +96,14 @@
         <p id="color-help">Preview paths use distinct colors to make joined geometry easier to follow; downloaded SVG paths remain black.</p>
       </section>
 
-      <section class="workbench">
+      <section id="workbench" class="workbench">
         <figure>
-          <figcaption>Input</figcaption>
+          <figcaption id="input-caption">Input</figcaption>
           <canvas id="input-canvas" width="512" height="512"></canvas>
+        </figure>
+        <figure id="drawing-figure" hidden>
+          <figcaption>Generated drawing · after cleanup</figcaption>
+          <canvas id="drawing-canvas" width="512" height="512"></canvas>
         </figure>
         <figure>
           <figcaption>Generated vector strokes</figcaption>
@@ -111,6 +132,10 @@
           scene vectorizer. Models load locally on demand; uploaded images stay
           in your browser and are never sent to a server.
         </p>
+        <p>Photo → drawing → vectors runs Informative Drawings in a worker,
+          then sends the cleaned grayscale raster to the clean-line checkpoint.
+          Models run in sequence to limit memory use. The usual SVG joining,
+          pruning, intersection splitting and redraw controls apply to the result.</p>
       </details>
     </main>
     <script type="module" src="/src/main.js"></script>

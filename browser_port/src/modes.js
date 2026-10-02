@@ -2,6 +2,14 @@
 const baseUrl = import.meta.env?.BASE_URL ?? '/';
 
 export const MODES = {
+  drawing: {
+    label: 'Photo → drawing → vectors', metric: 'drawing → clean', channels: 1,
+    vectorMode: 'line',
+    modelUrl: `${baseUrl}models/virtual_sketching_step.onnx`,
+    sampleUrl: `${baseUrl}samples/portrait.png`, sampleLabel: 'Load bundled portrait',
+    rounds: 4, steps: 128,
+    description: 'Turn a photograph into a line drawing with Informative Drawings, then trace it with the clean-line model. Generate and inspect the drawing first. This is experimental: fine details may be lost and contours can have gaps.',
+  },
   line: {
     label: 'Line drawing', metric: 'clean / WASM', channels: 1,
     modelUrl: `${baseUrl}models/virtual_sketching_step.onnx`,

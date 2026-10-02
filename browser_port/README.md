@@ -20,6 +20,11 @@ All three must be exported first (see below). The generated models are ignored
 by Git and are about 40 MB each. `npm run build` performs the same copy before
 building.
 
+The preparation script also downloads a pinned 17 MB Informative Drawings
+ONNX export, verifies its SHA-256, and caches it in `outputs/onnx`. Subsequent
+builds reuse that cache; the deployed model is served from the same origin as
+the app. Its upstream MIT notice is included in `public/informative-drawings-LICENSE.txt`.
+
 Open the local URL printed by Vite, select **Line drawing**, **Rough sketch**, or
 **Photo (portraits)**, upload an image, and click **Run vectorizer**. The sample
 button loads a duck, rough penguin or portrait for the selected mode.
@@ -28,6 +33,35 @@ Runtime Web. Images stay in the browser; there is no image-upload endpoint.
 Only the selected model is loaded, and switching releases the previous session.
 Uploaded originals are retained and reprocessed on mode changes; bundled samples
 switch to the appropriate sample. Each run starts from a fresh canvas.
+
+## Photo → drawing → vectors
+
+Select **Photo → drawing → vectors**, upload a photo (or load the portrait),
+and click **Generate drawing**. Inspect the intermediate drawing and adjust
+**Background cutoff**, then click **Vectorize drawing**. The usual SVG cleanup
+controls and download apply. **Download drawing PNG** saves the intermediate
+raster with the current cleanup applied.
+
+- Informative Drawings style 1 converts RGB `[0,1]` input in NCHW layout to a
+  single grayscale plane, using ONNX Runtime Web WASM in a dedicated worker.
+- The maximum long side defaults to 512 px, with a 256 px option for lower
+  memory use. Aspect ratio is preserved, transparency is composited white, and
+  small photos are not enlarged. Dimensions are edge-padded to multiples of
+  four (at least 32 px) for inference and cropped back afterward.
+- A background cutoff of 0.980 snaps faint gray to exactly white, keeping darker
+  strokes soft. Lower values remove more faint detail. This is necessary because
+  the clean sampler treats every pixel below 1 as ink. Changes use the cached
+  drawing, clear stale vectors, and do not rerun the drawing network.
+- The cleaned drawing is padded white on the right/bottom to square and passed
+  to the clean-line model. The drawing worker terminates before that model loads;
+  regenerating the drawing releases the vectorizer session first.
+- Default tracing budget: four rounds, up to 128 steps per round. More rounds
+  may improve coverage, but this experimental combination can omit fine details
+  and leave contour gaps. Changing resolution invalidates the cached drawing.
+
+Model provenance, feasibility results and limitations are recorded in
+[informative-drawings-notes.md](informative-drawings-notes.md). The pinned export
+is configured in `src/informative-drawings-config.js`. No images are uploaded.
 
 ## Rough-sketch mode
 
@@ -75,7 +109,7 @@ The reusable runtime is `src/model.js`; `src/preprocess.js` implements the
 model's crop/resize and cursor selection, while `src/raster.js` implements
 quadratic stroke rasterization and canvas pasting.
 
-## Model inputs
+## Virtual Sketching model inputs
 
 All image tensors are NHWC and have spatial size `128 x 128`.
 
@@ -99,7 +133,7 @@ before inference. Full images use AREA resizing; photo crops extrapolate white.
 `C` is 1 for clean line vectorization and 3 for the rough-sketch and
 photograph models.
 
-## Model outputs
+## Virtual Sketching model outputs
 
 | Output | Shape | Meaning |
 | --- | --- | --- |
@@ -119,6 +153,9 @@ recurrent state, matching the original vectorization sampler's multi-round
 behavior.
 
 ## SVG output
+
+An experimental photo → drawing → vector workflow and local ONNX feasibility
+results are documented in [informative-drawings-notes.md](informative-drawings-notes.md).
 
 Each pen-down model step is stored as its quadratic control/end parameters,
 starting cursor, patch window, image size, and previous/current width. The
@@ -271,9 +308,9 @@ quality benchmark. The original clean-line parity suite remains separate.
 
 ## Current scope
 
-`src/modes.js` defines all three checkpoint contracts.
-General photo-to-line conversion
-would need a differently trained model or a separate contour-extraction pipeline.
+`src/modes.js` defines the three Virtual Sketching checkpoint contracts and
+the experimental two-stage photo pipeline. Informative Drawings currently uses
+the single published style 1 ONNX export; other styles require separate exports.
 
 ## Export
 

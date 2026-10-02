@@ -1,4 +1,6 @@
-import { copyFile, mkdir, access } from 'node:fs/promises';
+import { copyFile, mkdir, access, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { DRAWING_MODEL } from '../src/informative-drawings-config.js';
 import { constants } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +52,21 @@ await access(roughSource, constants.R_OK).catch(() => {
 await copyFile(roughSource, resolve(browserPortDir, 'public', 'models', 'virtual_sketching_rough_step.onnx'));
 await copyFile(resolve(repoDir, 'sample_inputs', 'rough_sketches', 'penguin1.png'), resolve(browserPortDir, 'public', 'samples', 'penguin1.png'));
 console.log('Copied rough-sketch model and penguin sample to public/');
+
+const drawingCache = resolve(repoDir, 'outputs', 'onnx', DRAWING_MODEL.filename);
+const validDrawing = data => createHash('sha256').update(data).digest('hex') === DRAWING_MODEL.sha256;
+let drawingData = await readFile(drawingCache).catch(() => null);
+if (!drawingData || !validDrawing(drawingData)) {
+  console.log('Downloading pinned Informative Drawings model (17 MB)…');
+  const response = await fetch(DRAWING_MODEL.url);
+  if (!response.ok) throw new Error(`Drawing model download failed (HTTP ${response.status}).`);
+  drawingData = Buffer.from(await response.arrayBuffer());
+  if (!validDrawing(drawingData)) throw new Error('Drawing model checksum mismatch.');
+  await mkdir(dirname(drawingCache), { recursive: true });
+  await writeFile(drawingCache, drawingData);
+}
+await writeFile(resolve(browserPortDir, 'public', 'models', DRAWING_MODEL.filename), drawingData);
+console.log('Copied verified Informative Drawings model to public/');
 
 await mkdir(ortPublicDir, { recursive: true });
 for (const wasmFile of wasmFiles) {

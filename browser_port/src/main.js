@@ -2,6 +2,8 @@ import './styles.css';
 import { BrowserVectorizer } from './model.js';
 import { makeSquareCanvas, imageFromCanvas, preparePhoto, prepareRoughSketch } from './preprocess.js';
 import { getMode } from './modes.js';
+import { generateDrawing } from './generate-drawing.js';
+import { cleanDrawing, squareDrawing } from './informative-drawings.js';
 import { appendStrokePathElement, downloadStrokeSvg, strokeToQuadratic, joinQuadraticSegments, removeRedundantSegments, splitIntersectingPaths, createPathElement, createQuadraticPathElement, previewPathColor, redrawQuadraticPaths } from './svg.js';
 
 const element = id => document.getElementById(id);
@@ -36,6 +38,11 @@ const fitToleranceValue = element('fit-tolerance-value');
 const resetJoining = element('reset-joining');
 const joiningSummary = element('joining-summary');
 const originalLayer = element('original-layer');
+const generateButton = element('generate-drawing-button');
+const drawingResolution = element('drawing-resolution');
+const drawingCutoff = element('drawing-cutoff');
+const drawingCanvas = element('drawing-canvas');
+const downloadDrawingButton = element('download-drawing-button');
 
 let vectorizer = null;
 let loadedImage = null;
@@ -43,6 +50,8 @@ let sourceFile = null;
 let sourceIsSample = false;
 let busy = false;
 let displayedStrokeCount = 0;
+let photoImage = null;
+let rawDrawing = null;
 
 function setStatus(message, kind = '') {
   status.textContent = message;
@@ -52,7 +61,11 @@ function setStatus(message, kind = '') {
 function updateControls() {
   input.disabled = sampleButton.disabled = modeInput.disabled = stepsInput.disabled = retryButton.disabled = busy;
   roundsInput.disabled = busy || modeInput.value === 'photo';
-  runButton.disabled = busy || !loadedImage || !vectorizer?.session;
+  runButton.disabled = busy || !loadedImage || (modeInput.value !== 'drawing' && !vectorizer?.session);
+  generateButton.disabled = busy || !photoImage;
+  drawingResolution.disabled = busy;
+  drawingCutoff.disabled = busy || !rawDrawing;
+  downloadDrawingButton.disabled = busy || !rawDrawing;
   resetButton.disabled = busy || !loadedImage;
   downloadSvgButton.disabled = busy || !loadedImage || !vectorizer?.strokes?.length;
   joinDistance.disabled = showOriginal.disabled = midpointJoining.disabled = resetJoining.disabled = removeRedundant.disabled = splitIntersections.disabled = downloadSvgButton.disabled;
@@ -101,15 +114,15 @@ redrawCurves.addEventListener('change', () => { updateControls(); previewJoining
 fitTolerance.addEventListener('input', previewJoining);
 resetJoining.addEventListener('click', () => { joinDistance.value = '0'; previewJoining(); });
 
-function drawInput(image) {
-  inputCanvas.width = image.width;
-  inputCanvas.height = image.height;
+function drawInput(image, canvas = inputCanvas) {
+  canvas.width = image.width;
+  canvas.height = image.height;
   const pixels = new ImageData(image.width, image.height);
   for (let i = 0; i < image.width * image.height; i++) {
     for (let c = 0; c < 3; c++) pixels.data[i * 4 + c] = Math.round(image.data[i * image.channels + (image.channels === 1 ? 0 : c)] * 255);
     pixels.data[i * 4 + 3] = 255;
   }
-  inputCanvas.getContext('2d').putImageData(pixels, 0, 0);
+  canvas.getContext('2d').putImageData(pixels, 0, 0);
 }
 
 function updateStrokePreview(size, fromIndex = 0) {
@@ -121,11 +134,11 @@ function updateStrokePreview(size, fromIndex = 0) {
 }
 
 function resetOutput() {
-  if (!loadedImage) return;
-  vectorizer.setImage(loadedImage);
+  if (loadedImage) vectorizer.setImage(loadedImage);
+  else if (vectorizer) vectorizer.strokes = [];
   strokeLayer.replaceChildren();
   clearJoiningPreview();
-  outputSvg.setAttribute('viewBox', `0 0 ${loadedImage.width} ${loadedImage.height}`);
+  outputSvg.setAttribute('viewBox', `0 0 ${loadedImage?.width ?? 512} ${loadedImage?.height ?? 512}`);
   displayedStrokeCount = 0;
   stepsMetric.textContent = strokesMetric.textContent = '0';
 }
@@ -133,7 +146,20 @@ function resetOutput() {
 async function prepareFile(file) {
   const bitmap = await createImageBitmap(file);
   try {
-    if (modeInput.value !== 'line') {
+    if (modeInput.value === 'drawing') {
+      const limit = Number(drawingResolution.value);
+      const scale = Math.min(1, limit / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      photoImage = imageFromCanvas(canvas, 3);
+      rawDrawing = loadedImage = null;
+      drawingCanvas.getContext('2d').clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    } else if (modeInput.value !== 'line') {
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
@@ -150,8 +176,20 @@ async function prepareFile(file) {
     bitmap.close();
   }
   resetOutput();
-  drawInput(loadedImage);
+  const preview = photoImage ?? loadedImage;
+  drawInput(preview);
+  sizeMetric.textContent = `${preview.width} × ${preview.height}`;
+}
+
+function updateDrawingPreview() {
+  element('drawing-cutoff-value').textContent = Number(drawingCutoff.value).toFixed(3);
+  if (!rawDrawing) return;
+  const drawing = cleanDrawing(rawDrawing, Number(drawingCutoff.value));
+  drawInput(drawing, drawingCanvas);
+  loadedImage = squareDrawing(drawing);
+  resetOutput();
   sizeMetric.textContent = `${loadedImage.width} × ${loadedImage.height}`;
+  updateControls();
 }
 
 async function bundledFile() {
@@ -180,7 +218,11 @@ async function loadMode() {
   const config = getMode(mode);
   roundsInput.value = config.rounds;
   stepsInput.value = config.steps;
-  element('input-label').textContent = { line: 'Input clean line drawing', rough: 'Input rough sketch', photo: 'Input photograph' }[mode];
+  element('input-label').textContent = { line: 'Input clean line drawing', rough: 'Input rough sketch', photo: 'Input photograph', drawing: 'Input photograph' }[mode];
+  element('drawing-controls').hidden = element('drawing-figure').hidden = mode !== 'drawing';
+  element('workbench').classList.toggle('with-drawing', mode === 'drawing');
+  element('input-caption').textContent = mode === 'drawing' ? 'Photo' : 'Input';
+  runButton.textContent = mode === 'drawing' ? 'Vectorize drawing' : 'Run vectorizer';
   element('mode-description').textContent = config.description;
   sampleButton.textContent = config.sampleLabel;
   retryButton.hidden = true;
@@ -188,14 +230,17 @@ async function loadMode() {
   setStatus(`Loading ${config.label.toLowerCase()} model…`);
   // Only one session is retained: switching modes does not accumulate models.
   const oldSession = vectorizer?.session;
-  vectorizer = new BrowserVectorizer({ mode });
+  vectorizer = new BrowserVectorizer({ mode: config.vectorMode ?? mode });
   loadedImage = null;
-  strokeLayer.replaceChildren();
-  clearJoiningPreview();
-  displayedStrokeCount = 0;
+  photoImage = rawDrawing = null;
+  inputCanvas.getContext('2d').clearRect(0, 0, inputCanvas.width, inputCanvas.height);
+  drawingCanvas.getContext('2d').clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+  resetOutput();
+  sizeMetric.textContent = '—';
   if (oldSession) await oldSession.release();
   try {
-    await vectorizer.load();
+    // First-stage generation releases its worker before the vectorizer loads.
+    if (mode !== 'drawing') await vectorizer.load();
   } catch (error) {
     modelMetric.textContent = 'load failed';
     retryButton.hidden = false;
@@ -204,8 +249,41 @@ async function loadMode() {
   modelMetric.textContent = config.metric;
   if (sourceIsSample) sourceFile = await bundledFile();
   if (sourceFile) await prepareFile(sourceFile);
-  setStatus(loadedImage ? 'Model and image ready.' : 'Model loaded. Choose an image or load the bundled sample.');
+  if (mode === 'drawing') setStatus(photoImage ? 'Photo ready. Generate a drawing next.' : 'Choose a photo or load the bundled portrait.');
+  else setStatus(loadedImage ? 'Model and image ready.' : 'Model loaded. Choose an image or load the bundled sample.');
 }
+
+drawingResolution.addEventListener('change', () => perform(async () => {
+  if (sourceFile) await prepareFile(sourceFile);
+  setStatus('Resolution changed. Generate the drawing again.');
+}));
+drawingCutoff.addEventListener('input', () => {
+  updateDrawingPreview();
+  setStatus('Drawing cleanup updated. Vectorize again to refresh the result.');
+});
+generateButton.addEventListener('click', () => perform(async () => {
+  if (!photoImage) return;
+  if (vectorizer.session) {
+    await vectorizer.session.release();
+    vectorizer.session = null;
+  }
+  const start = performance.now();
+  const drawing = await generateDrawing(photoImage, setStatus);
+  rawDrawing = drawing;
+  updateDrawingPreview();
+  setStatus(`Drawing generated in ${((performance.now() - start) / 1000).toFixed(1)}s. Adjust background cleanup, then vectorize.`);
+}));
+downloadDrawingButton.addEventListener('click', () => {
+  drawingCanvas.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'informative-drawing.png';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+});
 
 modeInput.addEventListener('change', () => perform(loadMode));
 retryButton.addEventListener('click', () => perform(loadMode));
@@ -215,7 +293,7 @@ input.addEventListener('change', () => perform(async () => {
   await prepareFile(file);
   sourceFile = file;
   sourceIsSample = false;
-  setStatus('Image ready.');
+  setStatus(modeInput.value === 'drawing' ? 'Photo ready. Generate a drawing next.' : 'Image ready.');
 }));
 sampleButton.addEventListener('click', () => perform(async () => {
   const file = await bundledFile();
@@ -223,7 +301,7 @@ sampleButton.addEventListener('click', () => perform(async () => {
   sourceFile = file;
   sourceIsSample = true;
   input.value = '';
-  setStatus('Bundled sample ready.');
+  setStatus(modeInput.value === 'drawing' ? 'Bundled photo ready. Generate a drawing next.' : 'Bundled sample ready.');
 }));
 resetButton.addEventListener('click', () => {
   resetOutput();
@@ -232,7 +310,11 @@ resetButton.addEventListener('click', () => {
 });
 
 runButton.addEventListener('click', () => perform(async () => {
-  if (!loadedImage || !vectorizer.session) return;
+  if (!loadedImage) return;
+  if (!vectorizer.session) {
+    setStatus('Loading clean-line vectorizer…');
+    await vectorizer.load();
+  }
   resetOutput();
   updateStrokePreview(loadedImage.width);
   const config = getMode(modeInput.value);
